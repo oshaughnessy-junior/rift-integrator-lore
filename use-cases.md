@@ -42,3 +42,22 @@ Harness: `MonteCarloMarginalizeCode/Code/test/integrators/bench_onsource_ensembl
 
 `grep "PORTFOLIO setup"` (portfolio) or `grep "ILE: "` in the ILE log to confirm the sampler. A run
 that finishes in ~60s with no `.dat` is usually the wrong sampler / a config that bailed.
+
+## VALIDATED high-SNR recipe (the n_eff lottery fix)
+
+On a very sharp high-SNR peak, AV contracts onto the peak or the wrong spot ~50/50, so a large
+fraction of independent runs collapse to n_eff~1 (a bimodal LOTTERY, robust across every proposal/cap
+tried). Two levers, in order of impact:
+
+1. **`--sampler-warmstart-retry-neff 5` (L0 auto-rescue) -- the big one.** If a pass finishes below
+   the threshold, re-seed AV from the run's OWN highest-L samples (the peak it did find) and re-run.
+   Same-problem reuse, cannot bias, frame-safe. On the SNR~80 study this took the landed fraction
+   from 4/9 to **8/9** (chronic n_eff~1 collapsers landed at 25-33). Cost: a rescued run does 2
+   integration passes. Works for standalone AV or the AV+GMM portfolio.
+2. **`--force-adapt-all --internal-rotate-phase` (frame-matched seed).** Improves the LANDERS
+   (n_eff ~50 vs ~30, fuller sky-ring exploration) but does NOT change the collapse rate. Use with a
+   phase-rotated warm seed (see coordinates-and-degeneracies.md) or it poisons the proposal.
+
+Full recipe: portfolio AV+GMM (cap8, `--internal-gmm-adaptive-components`) + `--force-adapt-all`
++ `--internal-rotate-phase` (phase-frame-matched warm seed) + `--sampler-warmstart-retry-neff 5`.
+Even then, at modest n_eff, pool a few landed copies for a publication-grade posterior.

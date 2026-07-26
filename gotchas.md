@@ -44,3 +44,11 @@
   `seed_phi_orb = mod(phi+psi, 4pi)`, `seed_psi = mod(phi-psi, 4pi)`. Sky-network needs the driver's
   `my_rotation` on (ra,dec). Or generate the pilot with the SAME rotation flags. `--force-adapt-all`
   is frame-preserving (only sets which dims AV contracts), so it is safe with a physical seed.
+
+- **`opts.sampler_method` is CLOBBERED to 'GMM' during portfolio setup.** In the driver's portfolio
+  member loop, the GMM branch does `opts.sampler_method='GMM'` (to force GMM-specific arg-parsing).
+  So for an AV+GMM portfolio, EVERY downstream `opts.sampler_method == 'portfolio'` check is False,
+  and `== 'GMM'` is True. This silently (a) made the portfolio-only setup block dead code (the GMM
+  branch happens to cover the gmm_adaptive forwarding, so no visible harm) and (b) broke the L0
+  auto-rescue gate for the portfolio. Detect a portfolio via `opts.sampler_portfolio` (the member
+  list, which is NOT clobbered), never via `opts.sampler_method`, in any code after sampler setup.
