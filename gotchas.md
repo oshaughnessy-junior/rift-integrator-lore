@@ -52,6 +52,9 @@
   became dead code, the L0 auto-rescue gate never fired for a portfolio, and `--internal-use-lnL` took
   GMM's branch (getting `return_lnI`, which the portfolio does not consume). Now replaced by a
   non-destructive `use_gmm_member` flag + `use_gmm_args = (method=='GMM') or use_gmm_member`.
+  NOTE: the portfolio still ran only because its setup branch force-sets `internal_use_lnL=True` --
+  that forcing is INTENTIONAL design (see option-combos.md), not a lucky accident; RIFT deliberately
+  leaves valid option combinations to the user rather than wiring them in.
   LESSON that outlives the fix: **never branch on a mutable `opts.*` field that setup code rewrites** —
   and if you must know whether a portfolio is active, use `opts.sampler_portfolio` (the member list) or
   the local `use_portfolio` flag, which are not rewritten. If your checkout still has the clobber,

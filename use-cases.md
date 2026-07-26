@@ -61,3 +61,14 @@ tried). Two levers, in order of impact:
 Full recipe: portfolio AV+GMM (cap8, `--internal-gmm-adaptive-components`) + `--force-adapt-all`
 + `--internal-rotate-phase` (phase-frame-matched warm seed) + `--sampler-warmstart-retry-neff 5`.
 Even then, at modest n_eff, pool a few landed copies for a publication-grade posterior.
+
+## Methodology note: chase a ROBUST setup, not a characterization of bad ones
+
+When an integrator setup shows instability (e.g. a bimodal n_eff lottery), the useful move is to find
+a configuration that is ROBUST and then **backtest it down to lower SNR to confirm it is still
+useful** there -- not to spend the budget characterizing exactly how a bad setup fails. Performance
+of a bad setup is worth a bounded look, no more.
+
+Always include `--interpolate-time True` (with the NoLoop combo) in any convergence study: without it
+the extrinsic surface carries a time-quantization non-smoothness that is a discretization artifact,
+and you will be tuning the sampler against an artifact.

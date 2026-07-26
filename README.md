@@ -42,13 +42,21 @@ dispatch: `integrate_likelihood_extrinsic_batchmode` ~lines 1169-1244.
    seed lottery. See `coordinates-and-degeneracies.md`.
 4. **n_eff is GPU-non-deterministic even at fixed `--seed`** (float reduction order). Never judge
    reliability from <~8 draws. See `gotchas.md`.
-5. **The portfolio estimate is unbiased for ANY member weights** (balance-heuristic `q_mix`), so a
+5. **Valid option COMBINATIONS are the user's burden BY DESIGN.** Many RIFT options are de facto
+   defaults meant to be used together, but the wiring that would enforce that was never added (it
+   would be spaghetti after a decade of accretion). An incomplete combo usually degrades silently
+   rather than failing. Read `option-combos.md` before composing a command line. Two you almost
+   always want: `--vectorized --gpu --force-xpy` (the maintained NoLoop likelihood) and
+   `--interpolate-time True` (cubic Q_lm time interpolation; needs NoLoop; removes a spurious
+   extrinsic non-smoothness and makes convergence more robust).
+6. **The portfolio estimate is unbiased for ANY member weights** (balance-heuristic `q_mix`), so a
    member can never bias lnZ — only cost draws. This is why AV can be freeze-exempt. See `samplers.md`.
 
 ## Contents
 
 - `samplers.md` — per-sampler: what it is, key options, when to use, failure modes.
 - `coordinates-and-degeneracies.md` — extrinsic coordinate transforms + the degeneracies they tame.
+- `option-combos.md` — **valid option COMBINATIONS** (NoLoop, cubic time interp, lnL/return_lnI). Read first.
 - `options-cheatsheet.md` — the CLI flags that actually change behavior, grouped.
 - `use-cases.md` — decision guide: given an event, which sampler + config.
 - `gotchas.md` — the traps, with the symptom that reveals each.
