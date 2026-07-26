@@ -29,3 +29,18 @@
   gives AV no speedup (correctness-only). It CAN warm-start GMM/portfolio (model reuse).
 - **`--fairdraw-extrinsic-output` is useless at low n_eff** (resamples ∝ weight -> copies of one
   point). For a posterior at low n_eff you must pool many copies.
+
+- **Coordinate-transform flags need a FRAME-MATCHED warm-start seed.** `--internal-rotate-phase`
+  (sampler's phi_orb/psi hold phase_p=phi+psi, phase_m=phi-psi in [0,4pi]) and
+  `--internal-sky-network-coordinates` (H1-L1 network sky frame) change what the sampler's parameter
+  slots MEAN. But `--sampler-warmstart-samples` maps the seed to the sampler by COLUMN NAME and does
+  NOT transform values (`bootstrap_from_samples`, driver ~2714). So a seed in PHYSICAL coordinates
+  (e.g. a cherry-picked-pilot `--save-samples` export, which the driver un-rotates on output) is
+  poured straight into the rotated/network slots -> the warm live region lands in the wrong place ->
+  the run COLLAPSES (observed: a high-SNR point that landed n_eff~36 with a physical seed + no
+  rotation collapsed to n_eff~1 for ALL seeds when the rotations were added with the same physical
+  seed). Symptom: adding the coordinate flags makes n_eff uniformly WORSE, not better.
+  Fix: transform the seed into the sampling frame first. Phase is trivial:
+  `seed_phi_orb = mod(phi+psi, 4pi)`, `seed_psi = mod(phi-psi, 4pi)`. Sky-network needs the driver's
+  `my_rotation` on (ra,dec). Or generate the pilot with the SAME rotation flags. `--force-adapt-all`
+  is frame-preserving (only sets which dims AV contracts), so it is safe with a physical seed.
