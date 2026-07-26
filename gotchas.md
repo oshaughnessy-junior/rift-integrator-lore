@@ -45,10 +45,14 @@
   `my_rotation` on (ra,dec). Or generate the pilot with the SAME rotation flags. `--force-adapt-all`
   is frame-preserving (only sets which dims AV contracts), so it is safe with a physical seed.
 
-- **`opts.sampler_method` is CLOBBERED to 'GMM' during portfolio setup.** In the driver's portfolio
-  member loop, the GMM branch does `opts.sampler_method='GMM'` (to force GMM-specific arg-parsing).
-  So for an AV+GMM portfolio, EVERY downstream `opts.sampler_method == 'portfolio'` check is False,
-  and `== 'GMM'` is True. This silently (a) made the portfolio-only setup block dead code (the GMM
-  branch happens to cover the gmm_adaptive forwarding, so no visible harm) and (b) broke the L0
-  auto-rescue gate for the portfolio. Detect a portfolio via `opts.sampler_portfolio` (the member
-  list, which is NOT clobbered), never via `opts.sampler_method`, in any code after sampler setup.
+- **`opts.sampler_method` was CLOBBERED to 'GMM' during portfolio setup (FIXED upstream; still true
+  on older checkouts).** The driver's portfolio member loop used to set `opts.sampler_method='GMM'` (to
+  force GMM-specific arg-parsing for a GMM member). For an AV+GMM portfolio that made EVERY downstream
+  `opts.sampler_method == 'portfolio'` test False and `== 'GMM'` True: the portfolio-only setup block
+  became dead code, the L0 auto-rescue gate never fired for a portfolio, and `--internal-use-lnL` took
+  GMM's branch (getting `return_lnI`, which the portfolio does not consume). Now replaced by a
+  non-destructive `use_gmm_member` flag + `use_gmm_args = (method=='GMM') or use_gmm_member`.
+  LESSON that outlives the fix: **never branch on a mutable `opts.*` field that setup code rewrites** —
+  and if you must know whether a portfolio is active, use `opts.sampler_portfolio` (the member list) or
+  the local `use_portfolio` flag, which are not rewritten. If your checkout still has the clobber,
+  every `sampler_method=='portfolio'` check after sampler setup is silently dead.
