@@ -27,6 +27,29 @@ Given an event/point, which sampler + config. Heuristics from the O4d portfolio 
   members with repeated `--sampler-portfolio` flags. It replicates standalone-AV lnZ unbiased on
   typical events; on an AV-optimal event it costs a modest tail slowdown for carrying GMM.
 
+## n_eff is NECESSARY but NOT SUFFICIENT (the confidently-wrong failure)
+
+**Do not certify a run by its own n_eff, and do not pick the best copy by max n_eff.** n_eff measures
+weight CONCENTRATION, not COVERAGE. A pass that locks onto one narrow region of a sharp posterior has
+low weight variance -- so it reports a HIGH n_eff -- while missing posterior mass, so its lnZ is too
+low. It looks like the best run in the ensemble and is the most wrong one.
+
+Measured (cold ensemble, loud ~2-IFO event, 9 seeds, 5 landed): lnZ across landed copies spanned
+**12 nats**, and the copy with the highest n_eff (58) sat **11 nats below** a four-copy consensus that
+agreed to within 1.4 nats. Only disagreement with the pool exposed it.
+
+Practice:
+- Prefer the **MEDIAN over landed copies** to an n_eff-argmax or an n_eff-weighted mean (an
+  n_eff-weighted mean is actively dragged toward a confidently-wrong copy, since that copy carries the
+  largest weight).
+- Treat cross-copy AGREEMENT as the primary reliability signal; n_eff only screens out the obvious
+  collapses.
+- Mode count from the weight-correct extrinsic fit (`--extrinsic-proposal-output`) is a useful
+  secondary check but not decisive at modest sample sizes.
+
+So copies are needed for two distinct reasons: to FIND a good draw, and to DETECT a bad draw that
+looks good. The second is the one that bites.
+
 ## When n_eff is a lottery (pool copies)
 
 On a hard point, a single run — any config — is not a posterior. Recipe:
