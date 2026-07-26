@@ -59,3 +59,27 @@
   and if you must know whether a portfolio is active, use `opts.sampler_portfolio` (the member list) or
   the local `use_portfolio` flag, which are not rewritten. If your checkout still has the clobber,
   every `sampler_method=='portfolio'` check after sampler setup is silently dead.
+
+- **COLD portfolio start crashed on a sharp high-SNR peak: "boolean index did not match indexed
+  array" (FIXED; pre-existing in rift_O4d and earlier).** `mcsamplerEnsemble.update_sampling_prior`
+  dropped NaN-weight samples by REASSIGNING `ln_weights` -- but `ln_weights` is built ONCE, before the
+  loop over dim_groups. The first group containing a NaN shrank it (e.g. 10000 -> 8686); every later
+  group rebuilt `temp_samples` at full length and reused the stale shorter weights, so `GMM.update`/
+  `GMM.fit` raised IndexError. Only reachable when the weights actually contain NaN -- i.e. a
+  degenerate/cold pass -- so WARM runs never saw it, while every cold AV+GMM portfolio start on a very
+  sharp peak died around chunk 8 and wrote NO output. Fix: filter into a loop-LOCAL name.
+  **Generalized lesson (same class as the `sampler_method` clobber above): never mutate state that is
+  shared across loop iterations / read later -- filter into a local. Two separate silent failures on
+  this codebase came from exactly this pattern.**
+
+- **`FAILED ANALYSIS` used to print only the exception message, not the traceback.** For faults deep
+  in the sampler stack the message alone ("boolean index did not match...", "index out of range") is
+  useless, and in a batch job this handler is often the ONLY record. It now prints the traceback too.
+  If you are debugging on an older checkout, add `traceback.print_exc()` there first -- it converts a
+  day of code archaeology into one run.
+
+- **The L0 auto-rescue used to skip the case it was built for.** `mcsamplerPortfolio`/AV return
+  `(None,None,None,None)` from their "terminate early" branch when the live volume never finds finite
+  in-volume samples -- exactly the cold, ultra-sharp peak scenario. The rescue gate required
+  `neff is not None`, so it never fired there. Now `neff=None` counts as below-threshold (the pass
+  still populated `_rvs`, so the peak-seed is available).
