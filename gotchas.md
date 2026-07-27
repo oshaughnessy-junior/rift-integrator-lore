@@ -83,3 +83,16 @@
   in-volume samples -- exactly the cold, ultra-sharp peak scenario. The rescue gate required
   `neff is not None`, so it never fired there. Now `neff=None` counts as below-threshold (the pass
   still populated `_rvs`, so the peak-seed is available).
+
+- **The shape-recovery merge gate DEADLOCKS under its own multiprocessing pool.** Symptom: the run
+  goes quiet forever -- elapsed time grows, CPU time does NOT (check
+  `cut -d' ' -f14,15 /proc/<pid>/stat` twice, or `ps -o etime=,time=`), the log stops growing, and
+  one worker sits on a large frozen CPU total while the others idle at ~0. Observed at `--jobs 16`
+  (hung ~44/96 cases) and again at `--jobs 4` (hung mid-run). It is NOT branch-specific: both the
+  base and the candidate arm hung on separate attempts, and the same code completes all 24 portfolio
+  targets cleanly with **`--jobs 1`**.
+  Fix: run the gate with `--jobs 1` (slower but reliable), or add a per-case timeout. Do NOT conclude
+  a code regression from a gate hang until you have reproduced it single-process.
+  Related trap: the *parent* process shows ~0 CPU even when healthy (it delegates to the pool), so
+  parent CPU is not a liveness signal -- measure the WORKERS. And do not use log growth either: the
+  gate's python is not line-buffered when redirected, so a healthy run can look silent.
