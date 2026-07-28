@@ -56,6 +56,7 @@ dispatch: `integrate_likelihood_extrinsic_batchmode` ~lines 1169-1244.
 
 - `samplers.md` — per-sampler: what it is, key options, when to use, failure modes.
 - `coordinates-and-degeneracies.md` — extrinsic coordinate transforms + the degeneracies they tame.
+- `recommended-configs.md` — **copy-paste configuration GROUPS** (typical / sharp-peak / degeneration guard) + how to judge a result. Start here.
 - `option-combos.md` — **valid option COMBINATIONS** (NoLoop, cubic time interp, lnL/return_lnI). Read first.
 - `options-cheatsheet.md` — the CLI flags that actually change behavior, grouped.
 - `use-cases.md` — decision guide: given an event, which sampler + config.
