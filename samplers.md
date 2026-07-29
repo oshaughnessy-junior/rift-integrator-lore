@@ -5,6 +5,10 @@ psi, phi_orb, and time via time-marginalization). Each draws points, evaluates t
 likelihood, and forms importance weights `w = L * prior / sampling_prior`. Quality is the effective
 sample count `n_eff` (Kish). Intrinsic params are fixed per ILE evaluation (the grid point).
 
+The same classes are reused by **CIP** for the INTRINSIC integral, but there the integrand is
+`exp(lnL)` over a fitted surface rather than lnL over the extrinsic parameters, so the failure modes
+differ. CIP-specific behavior is tagged **[CIP]** below.
+
 ---
 
 ## AC — `adaptive_cartesian_gpu` (`mcsamplerGPU`)  [DRIVER DEFAULT]
@@ -44,6 +48,23 @@ Critical behaviors / lore:
   burn-in / calmarg warm-start gives AV no speedup (correctness-safe only). (See DESIGN_adaptive_driver.)
 - Standalone AV can stall at n_eff~1 on the hardest high-SNR best-fit points if run in correlated
   coordinates (use the rotations) or without full adaptation.
+- **AV is TEMPERING-INDEPENDENT — do not try to fix a poor AV n_eff with the tempering exponent.**
+  This corrects a very natural misconception (every other RIFT sampler *is* tempered, and both ILE
+  and CIP hand AV a `tempering_exp` anyway). Read from the code on branch `tdlike_paper2`
+  (`RIFT/integrators/mcsamplerAdaptiveVolume.py`; byte-identical on `origin/rift_O4d`):
+  `tempering_exp` defaults to **0.0** (`:492`) and its ONLY live use inside `integrate_log` is the
+  gate that forces `save_intg=True` (`:502-503`). The adaptive-volume contraction itself thresholds
+  on the **untempered** `log_integrand = lnL + log_joint_p_prior` (`:579`); the one line that would
+  have applied the exponent to the weights is **commented out** (`:580`). Per the docstring (`:445`)
+  the exponent belongs to the OPTIONAL 1-D-marginal-histogram adaptive-sampling-prior layer, which
+  is off by default. Contrast GMM: `mcsamplerEnsemble.py` defaults `tempering_exp` to **1.0**
+  (`:185`, `:339`) and really does apply it (`ln_weights *= tempering_exp`, `:240`).
+  Consequence: the **[CIP]** auto-tempering collapse (`my_exp` -> ~0.003 on an unshifted lnL~3300
+  peak — see `options-cheatsheet.md`) is a **GMM/AC** problem, not an AV convergence lever. When
+  AV's n_eff is poor the levers are coordinates, `--force-adapt-all`, and warm-start/rescue.
+  Ours-in-production corroboration (2026-07, GW250114 CIP on real LIGO data): AV n_eff 25.3
+  unshifted vs 20.3 shifted — i.e. **unchanged within run-to-run scatter** while `my_exp` moved 33x
+  (0.0153 -> 0.504).
 
 ---
 
@@ -69,6 +90,24 @@ Key options:
 Failure mode: standalone GMM has been observed to NaN on chunk 1 on hard/high-SNR events (S250114ax,
 both points). It works reliably only INSIDE the portfolio, where AV's broad density in `q_mix` bounds
 the GMM importance weights and a NaN-weight guard stabilizes it.
+
+**[CIP] Second, separate GMM failure mode on a LOUD event: arithmetic overflow, not degeneracy.**
+CIP feeds the sampler `exp(lnL)`. On a loud, peaked event (GW250114, lnL up to ~3307) `exp(3300)`
+is `+inf` in float64, GMM's `_initialize` raises `ValueError: probabilities contain NaN`, every
+`dat_logL` comes back non-finite, and CIP itself then dies at
+`lnLmax = np.max(dat_logL[np.isfinite(dat_logL)])` with `zero-size array to reduction operation
+maximum` (`bin/util_ConstructIntrinsicPosterior_GenericCoordinates.py:3148`, branch
+`tdlike_paper2`). GMM's live-point cutoff `L_cutoff = exp(max_lnL - lnL_shift - offset)` (`:2947`)
+is literally `exp(3300)` without a shift. **Note the misleading traceback: the crash you SEE is
+CIP's own reduction on an all-NaN column, several frames away from the sampler that caused it.**
+Fix the arithmetic (`--lnL-shift-prevent-overflow` / `--lnL-protect-overflow`, see
+`options-cheatsheet.md`) or, better, use AV.
+
+**Crucially: fixing the overflow does NOT make GMM competitive.** Ours-in-production, 2026-07,
+GW250114/U real `all.net`: with protection the crash is gone and the run is finite, but GMM's own
+ESS still collapses to ~1 (n_eff 1-4) on the sharp peak and the library's internal n_eff tripwire
+fires, while AV on the same data got n_eff 33-72. Overflow protection buys you a *result*, not a
+*good* result. Use AV.
 
 ---
 

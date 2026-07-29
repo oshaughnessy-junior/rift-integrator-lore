@@ -43,6 +43,45 @@ Driver: `integrate_likelihood_extrinsic_batchmode`. Line numbers vs branch
 ## Budget / convergence
 - `--n-max`, `--n-eff`, `--n-chunk`, `--vectorized --gpu`, `--force-xpy` (inert without `--gpu`)
 
+## [CIP] lnL overflow + auto-tempering (loud events)
+
+Different driver, different flags: `bin/util_ConstructIntrinsicPosterior_GenericCoordinates.py`.
+Line numbers verified against branch `tdlike_paper2` (2026-07); `origin/rift_O4d` is byte-identical
+in this file **except** for the `--lnL-protect-overflow` fix below (its own numbers are ~15 lines
+lower, e.g. `my_exp` at `:2885`).
+
+CIP passes the sampler `exp(lnL)`, and it AUTO-PICKS the tempering exponent from the peak of the
+fitted surface (`:2900` AV branch / `:2902` GMM branch), then hands it over as `tempering_exp`
+(`:3009`):
+
+    my_exp = min(1, 0.8*ln(n_step)/max(Y))      # AV branch
+    my_exp = min(1, 4.0*ln(n_step)/max(Y))      # GMM branch
+
+With no shift and lnL~3300 at `n_step=1e5` that is `my_exp ~ 0.003` — adaptation effectively OFF.
+Both loud-event problems (the `exp()` overflow and the tempering collapse) have the same one-knob
+cure: shift the peak down to ~+100.
+
+- **`--lnL-shift-prevent-overflow S`** (`:303`) — the working STATIC lever, and the one to reach for
+  first. Set `S ~ lnLmax - 100`. It is subtracted from `Y` before every fit/`exp()`
+  (the `Y = Y[indx_ok] - lnL_shift` lines, `:2183`-`:2476`), feeds the GMM `L_cutoff` (`:2947`), and
+  is **added back to the output evidence** (`:3080`) — exact and reproducible by design. Verified in
+  production 2026-07 on GW250114/U: lifted `my_exp` 0.0153 -> 0.504 (33x). Caveat from its own help
+  text: do NOT set S so large that the peak shifted lnL approaches or crosses 0 — the fit relaxes to
+  0 and you get garbage. Peak ~ +100 is the intended sweet spot. Works with AV, GMM and portfolio.
+- **`--lnL-protect-overflow`** (`:304`) — the DYNAMIC sibling: "subtract lnLmax-100, add it back".
+  **It was a silent NO-OP** across the whole O4b/O4c/O4d/master line, and `origin/rift_O4d` is still
+  broken as of 2026-07. Fixed on `tdlike_paper2` (`:2144-2147`) by wiring it into the SAME
+  `lnL_shift` machinery, combined via `max()` so the two flags coexist and well-behaved data
+  (`max_lnL < 100`) stays byte-identical. Check your checkout before relying on it — see
+  `gotchas.md`.
+- **`--internal-temper-log`** — AV/GMM temper on log-scaled weights; help text: "reduce insane
+  contrast and overfitting for high-amplitude cases". Plausible extra guard on a sharp peak, best
+  combined with the shift. `(unverified)` — never run by us; suggested from the help text only.
+- **Neither flag helps AV CONVERGE.** AV ignores `tempering_exp` entirely (`samplers.md`); for AV
+  the shift only removes the overflow. It is GMM/AC that get their adaptation back.
+- **`--n-max` is not the fix.** On a loud event the low n_eff is a tempering/overflow problem, not a
+  sample-budget problem — raising `--n-max` alone burns cycles without moving n_eff.
+
 ## Extrinsic export (see gotchas.md)
 - `--save-samples` (-S) — sparse sim_inspiral XML, **lnL only** (not the IS weight). `--save-P`
   (def 0.1! set 0 to keep all), `--save-deltalnL`.

@@ -75,6 +75,36 @@ Supported: the member list is not deduped, so this builds two independent AV ins
 constraint applies to the COMBINED share, so Group C composes with it. Reserved for hard cases;
 not a default, and not yet benchmarked.
 
+## Group E -- [CIP] loud/peaked event (INTRINSIC posterior, not extrinsic)
+
+Different program (`bin/util_ConstructIntrinsicPosterior_GenericCoordinates.py`), different flags.
+Groups A-D above do not apply. Use this whenever the fitted lnL surface peaks high -- lnL of a few
+hundred already matters, lnL~3300 (GW250114) is where it becomes fatal.
+
+    --sampler-method AV  --fit-method rf \
+    --lnL-shift-prevent-overflow <lnLmax - 100>
+
+- **`--sampler-method AV`, never `GMM`. [opt-in, validated -- ours in production 2026-07, real
+  LIGO data]** GMM does not merely converge badly here, it takes CIP DOWN (`exp(lnL)` -> `inf` ->
+  "probabilities contain NaN" -> `zero-size array to reduction`). Measured on real GW250114/U
+  `all.net`: AV n_eff **33-72** vs GMM **1-4**, with AV recovering the published detector-frame Mc
+  (31.34 vs ~31.3). See `gotchas.md`.
+- **`--lnL-shift-prevent-overflow S`, `S ~ lnLmax - 100`. [opt-in, validated]** Static and
+  reproducible: subtracted before the fit, added back to the evidence. Removes the overflow AND
+  restores the auto-tempering exponent (measured 33x: `my_exp` 0.0153 -> 0.504). Do not overshoot --
+  a peak shifted to near/below 0 makes the fit relax to 0 and produces garbage. Target peak ~ +100.
+  `--lnL-protect-overflow` is the dynamic version of the same knob and is a **no-op** on most
+  checkouts; check yours (`gotchas.md`).
+- **Do NOT expect the shift to raise AV's n_eff.** AV ignores the tempering exponent entirely
+  (`samplers.md`); on our case AV was n_eff 25.3 unshifted vs 20.3 shifted. Apply the shift for
+  crash-safety and for GMM/portfolio viability, not as an AV tuning knob.
+- **Run CIP on CPU + numpy, not in a GPU slot.** CIP needs no GPU, and pinning it to GPU slots just
+  starves it behind ILE in a contended pool. See the cupy-guard entry in `gotchas.md`.
+- **Keep `--fit-method rf`** for a peaked/noisy surface; do not switch to `gp` (rings/overfits at
+  high contrast). `(unverified)` -- inherited in-group guidance, not a controlled comparison by us.
+- Portfolio AV+GMM becomes *possible* once the shift makes GMM non-fatal, but we have not benchmarked
+  the portfolio on the CIP side at all. `(unverified)` for CIP -- start with plain AV.
+
 ---
 
 ## How to JUDGE a result (this is not optional at high SNR)

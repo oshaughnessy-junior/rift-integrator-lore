@@ -4,6 +4,17 @@ Working knowledge of RIFT's Monte-Carlo **integrators** (the extrinsic samplers 
 `integrate_likelihood_extrinsic_batchmode` / ILE): what each one is, which options matter, which
 sampler/coordinates to use for which event, the design choices behind them, and the traps.
 
+**Two callers, one sampler family.** The same `RIFT/integrators/mcsampler*` classes are driven by
+*two* different programs, and the lore transfers only partly between them:
+- **ILE** (`integrate_likelihood_extrinsic_batchmode`) — the **extrinsic** integral, the main subject
+  of this repo.
+- **CIP** (`bin/util_ConstructIntrinsicPosterior_GenericCoordinates.py`) — the **intrinsic** integral
+  over the fitted lnL surface. CIP drives the *same* AV/GMM samplers, but it feeds them the
+  **likelihood `exp(lnL)`**, not lnL, and it *auto-picks* the tempering exponent from the data. That
+  is why the loud-event failures look completely different on the CIP side (see the
+  `lnL_shift` / tempering entries in `gotchas.md` and Group E in `recommended-configs.md`).
+CIP-specific material is labelled **[CIP]** throughout.
+
 **Why this exists (and why it is NOT in the code repo):** this is cross-cutting, slowly-changing
 lore about *design intent and use* — it should survive code-branch churn and be transferable across
 clones/machines/agents. It is deliberately separate from `research-projects-RIT`. Deep,
@@ -51,12 +62,16 @@ dispatch: `integrate_likelihood_extrinsic_batchmode` ~lines 1169-1244.
    extrinsic non-smoothness and makes convergence more robust).
 6. **The portfolio estimate is unbiased for ANY member weights** (balance-heuristic `q_mix`), so a
    member can never bias lnZ — only cost draws. This is why AV can be freeze-exempt. See `samplers.md`.
+7. **[CIP] On a LOUD event use `--sampler-method AV`, never `GMM`.** GMM does not merely converge
+   badly on a sharp, high-lnL peak — it takes CIP DOWN (`exp(lnL)` overflows to `inf` ->
+   "probabilities contain NaN" -> CIP aborts). AV is the robust default there. This has bitten this
+   group three separate times. See `gotchas.md` and `recommended-configs.md` Group E.
 
 ## Contents
 
 - `samplers.md` — per-sampler: what it is, key options, when to use, failure modes.
 - `coordinates-and-degeneracies.md` — extrinsic coordinate transforms + the degeneracies they tame.
-- `recommended-configs.md` — **copy-paste configuration GROUPS** (typical / sharp-peak / degeneration guard) + how to judge a result. Start here.
+- `recommended-configs.md` — **copy-paste configuration GROUPS** (typical / sharp-peak / degeneration guard / **[CIP] loud event**) + how to judge a result. Start here.
 - `option-combos.md` — **valid option COMBINATIONS** (NoLoop, cubic time interp, lnL/return_lnI). Read first.
 - `options-cheatsheet.md` — the CLI flags that actually change behavior, grouped.
 - `use-cases.md` — decision guide: given an event, which sampler + config.

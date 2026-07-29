@@ -112,3 +112,82 @@
   Related trap: the *parent* process shows ~0 CPU even when healthy (it delegates to the pool), so
   parent CPU is not a liveness signal -- measure the WORKERS. And do not use log growth either: the
   gate's python is not line-buffered when redirected, so a healthy run can look silent.
+
+- **[CIP] `zero-size array to reduction operation maximum` on a LOUD event = GMM overflowed, use AV.**
+  Verified in production 2026-07 on real LIGO data (GW250114, lnL up to ~3307). Full chain: CIP hands
+  the sampler `exp(lnL)`, not lnL -> `exp(3300)` is float64 `+inf` -> GMM (`mcsamplerEnsemble`)
+  `_initialize` raises `ValueError: probabilities contain NaN` -> every `dat_logL` is non-finite ->
+  CIP itself dies at `lnLmax = np.max(dat_logL[np.isfinite(dat_logL)])`
+  (`bin/util_ConstructIntrinsicPosterior_GenericCoordinates.py:3148`, branch `tdlike_paper2`;
+  `origin/rift_O4d` byte-identical here). **The traceback you see is several frames from the cause** --
+  it looks like a data/format problem in CIP and is actually the sampler. Diagnostic: if CIP is dying
+  on an all-NaN reduction, print `max(lnL)` from `all.net` first.
+  **Fix: `--sampler-method AV`.** Measured on the same real `all.net`: AV n_eff 33-72 vs GMM 1-4, and
+  AV recovered the published detector-frame Mc (31.34 vs published ~31.3). AV needs no lnL shift, uses
+  log-space weights, and runs happily on CPU.
+  **This is the THIRD time GMM has bitten this group on a peaked target** (the other two: standalone
+  GMM NaN-ing on chunk 1 at high SNR, above; and the earlier pp-correction round). Treat "GMM is
+  unreliable on sharp/loud likelihoods" as a standing rule, not a per-event surprise.
+  Overflow protection (below) stops the CRASH but does NOT rescue GMM's quality -- its ESS still
+  collapses to ~1. See `samplers.md`, `recommended-configs.md` Group E.
+
+- **[CIP] `--lnL-protect-overflow` is a SILENT NO-OP on the whole O4b/O4c/O4d/master line.** It is
+  declared in argparse with a perfectly good docstring ("Before fitting, subtract lnLmax - 100. Add
+  this quantity back at the end.") at
+  `bin/util_ConstructIntrinsicPosterior_GenericCoordinates.py:304`, and `opts.lnL_protect_overflow`
+  is then **never referenced anywhere in the body** -- verified by grep on both `tdlike_paper2` and
+  `origin/rift_O4d` (still broken there as of 2026-07). It was implemented only on the old O4a line
+  and was dropped in the post-O4a refactors. Symptom: you add the flag to a loud-event CIP run and
+  absolutely nothing changes, including the printed tempering exponent.
+  **Workaround that works TODAY on any checkout: `--lnL-shift-prevent-overflow (lnLmax - 100)`** --
+  same mechanism, static number, already wired (see `options-cheatsheet.md`).
+  Fixed on `tdlike_paper2` (commit `1b96f488`) at `:2144-2147` as the *dynamic sibling* of the static
+  flag -- `lnL_shift = max(lnL_shift, max_lnL - 100)` feeding the EXISTING `lnL_shift` plumbing, so it
+  subtracts before every fit and is added back to the evidence, and the two flags compose via `max()`.
+  Generalizable lesson: **a declared-but-unreferenced argparse option is invisible to every test and
+  to every user** -- when a flag "does nothing", grep for the `opts.` name before theorising. This
+  codebase has now produced two of these; a lint pass for unreferenced `add_argument` dest names would
+  pay for itself.
+
+- **[CIP] CIP grabs cupy whenever it is IMPORTABLE, and the GMM-family guard has no runtime probe.**
+  Deployment trap on a heterogeneous pool. RIFT's integrator modules are INCONSISTENT about this,
+  which is why the failure is confusing (branch `tdlike_paper2`; identical on `origin/rift_O4d`):
+  - `mcsamplerAdaptiveVolume.py` (`:22`-`:54`), `mcsamplerGPU.py` (`:35`), `mcsamplerPortfolio.py`
+    (`:33`), `mcsamplerNFlow.py` (`:78`) wrap the import in a **bare `except:`** AND execute a
+    runtime probe `junk_to_check_installed = cupy.array(5)  # this will fail if GPU not installed
+    correctly`. These degrade to numpy correctly on a broken/old driver.
+  - `mcsamplerEnsemble.py` (GMM, `:10`-`:17`), `gaussian_mixture_model.py` (`:18`-`:25`) and
+    `MonteCarloEnsemble.py` (`:15`-`:22`) catch **`except ImportError:` only and have NO probe**. On
+    a node where cupy imports but the driver is too old, they set `cupy_ok = True` and the job dies
+    later with a runtime `cudaErrorInsufficientDriver`, far from the import.
+  **CIP does not need a GPU at all.** Our fix (verified in production 2026-07, CIT pool): run the
+  container's stock CIP on ANY singularity CPU slot -- drop `request_GPUs`/`require_gpus`, set
+  `requirements = (HAS_SINGULARITY =?= TRUE)`, and put a tiny shim directory first on `PYTHONPATH`
+  inside the container whose `cupy.py` raises `ImportError`, forcing numpy for every module
+  regardless of which guard it uses. Proof: a real CIP job landed on a CPU execute node, logged
+  `no cupy (mcsamplerAV)`, n_eff 28.85, correct posterior.
+  The naive alternative -- constraining CIP to GPU slots so cupy works -- is worse: it makes the
+  cheap, serial CIP node compete for the same scarce GPU slots as ILE and simply starves the DAG.
+  Two neighbouring deployment rules learned the same week:
+  - **Every RIFT `.sub` that runs a GPU container needs the SAME GPU landing constraint as `ILE.sub`.**
+    An inconsistent one lands the container on a node it cannot use.
+  - **If your submit files select a container image by GPU capability tier, BUILD EVERY TIER.** We
+    shipped a `Capability < 9.0` ceiling in `require_gpus` because the `cc90-120` (CUDA 12.8,
+    Hopper/Blackwell) image had never been built. Nothing failed -- the DAGs just sat IDLE for ~3 days
+    while ~50 free cap-8/12 slots were excluded. Building the second image and dropping the ceiling
+    took "would match if drained" from 24 to ~55 slots. **A missing image is a throughput bug that
+    presents as no error at all.** (Corollary hard gate: the two images must produce identical
+    likelihoods -- build them from the same source commit and diff a deterministic probe.)
+
+- **A RIFT DAG reporting "1 failed node / N futile" but EXITING WITH STATUS 0 has CONVERGED.**
+  Verified 2026-07 on four real-data DAGs. The "failed" node is `convergence_test_samples`, which
+  returns **1 on purpose** to STOP the iteration loop; the "futile" nodes are the pre-created
+  future-iteration nodes that the stop makes unreachable. This is the designed exit, not a crash.
+  **Check for `posterior_samples-*.dat` before you diagnose anything** -- if the final iteration's
+  posterior is there and the exit status is 0, you are done, and hours of "debugging" a healthy run
+  are avoidable. (This one costs people a day the first time they meet it.)
+  `(unverified)` Whether an ERRORING convergence test is distinguishable from a converged one by
+  DAG exit status alone -- both plausibly surface as the same "1 failed" line. We are separately
+  chasing a suspicious stop at iteration 2 under `--iteration-threshold 5`, which is exactly the
+  case where that ambiguity would matter. Until that is settled, treat exit-status-0 as *necessary*
+  evidence of convergence and confirm with the posterior file plus the actual iteration count.

@@ -17,6 +17,19 @@ Given an event/point, which sampler + config. Heuristics from the O4d portfolio 
   can beat AC/AV. NOTE `--internal-gmm-correlate-all` (single full-dim GMM) is usually WORSE, not
   better — it needs too many eff-samples/component. Fix the coordinates instead.
 
+## [CIP] Which sampler for the INTRINSIC integral
+
+Separate program, separate decision (`bin/util_ConstructIntrinsicPosterior_GenericCoordinates.py`).
+The rule there is much blunter than on the extrinsic side:
+
+- **Loud/peaked event (lnL of a few hundred or more): `--sampler-method AV`, plus
+  `--lnL-shift-prevent-overflow (lnLmax-100)`.** GMM there is not a quality choice, it is a CRASH
+  (`exp(lnL)` overflow -> NaN -> CIP aborts). Verified in production 2026-07 on real GW250114 data:
+  AV n_eff 33-72, GMM 1-4. See `recommended-configs.md` Group E.
+- **Quiet event:** GMM is survivable, but AV is the safer default and costs nothing. There is no
+  case in our record where CIP-GMM beat CIP-AV.
+- Run CIP on a CPU slot -- it needs no GPU, and pinning it to GPU slots starves it (`gotchas.md`).
+
 ## Standalone vs portfolio
 
 - **Standalone GMM:** avoid on hard/high-SNR events — observed to NaN on chunk 1. Use GMM only inside

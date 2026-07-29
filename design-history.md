@@ -56,6 +56,29 @@ Transferable lesson: a proposal-update rule must never be able to assign exactly
 to a region the prior supports, and adaptation weights must target a fixed distribution — anything
 that reweights relative to the *current* proposal without the `1/p_s` correction is a random walk.
 
+## [CIP] Why the intrinsic integral needs an lnL SHIFT at all, and why the shift is STATIC
+CIP integrates over the *fitted* lnL surface but hands the sampler the **likelihood** `exp(lnL)`,
+not lnL — so the dynamic range of the integrand is the exponential of the dynamic range of the data.
+At lnL~3300 that is `+inf` in float64 and the run does not degrade gracefully, it dies. Two design
+decisions follow, and both are visible in the flags:
+
+- **`lnL_shift` is one module-level offset applied in one place and undone in one place**: subtracted
+  from `Y` before every fit/`exp()`, folded into the GMM `L_cutoff`, and added back to the output
+  ln-evidence. Because it is a pure additive offset on a log quantity it is exact — which is why RIFT
+  is comfortable letting the user set it by hand.
+- **`--lnL-shift-prevent-overflow` is deliberately STATIC.** Its own help text: the shift is "*not*
+  defined dynamically based on sample values, to insure reproducibility and comparable integral
+  results". A data-derived shift would make two runs on slightly different grids non-comparable.
+  `--lnL-protect-overflow` (subtract `lnLmax-100`) is the dynamic convenience sibling, traded against
+  exactly that reproducibility — a plausible reason it was allowed to rot into a no-op through the
+  post-O4a refactors (see `gotchas.md`).
+
+Second-order but load-bearing: the shift is applied *before* CIP computes its auto-tempering exponent
+`my_exp = min(1, c*ln(n_step)/max(Y))`, so **the overflow knob is also the de-facto tempering
+control**. An unshifted loud event silently runs at `my_exp ~ 0.003`, i.e. adaptation off. This
+coupling is documented nowhere in the code and is the single most useful thing to know about running
+CIP on a loud event. It does not reach AV, which ignores `tempering_exp` entirely (`samplers.md`).
+
 ## High-SNR study conclusion (S250114ax best-fit point)
 n_eff is a bimodal LOTTERY for every GMM cap (survivorship bias if judged on few seeds). Low n_eff is
 an extrinsic-degeneracy collapse. `correlate-all` is worse (fitting variance > correlation benefit).
