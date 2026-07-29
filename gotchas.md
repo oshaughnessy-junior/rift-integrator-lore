@@ -179,15 +179,31 @@
     presents as no error at all.** (Corollary hard gate: the two images must produce identical
     likelihoods -- build them from the same source commit and diff a deterministic probe.)
 
-- **A RIFT DAG reporting "1 failed node / N futile" but EXITING WITH STATUS 0 has CONVERGED.**
-  Verified 2026-07 on four real-data DAGs. The "failed" node is `convergence_test_samples`, which
-  returns **1 on purpose** to STOP the iteration loop; the "futile" nodes are the pre-created
-  future-iteration nodes that the stop makes unreachable. This is the designed exit, not a crash.
-  **Check for `posterior_samples-*.dat` before you diagnose anything** -- if the final iteration's
-  posterior is there and the exit status is 0, you are done, and hours of "debugging" a healthy run
-  are avoidable. (This one costs people a day the first time they meet it.)
-  `(unverified)` Whether an ERRORING convergence test is distinguishable from a converged one by
-  DAG exit status alone -- both plausibly surface as the same "1 failed" line. We are separately
-  chasing a suspicious stop at iteration 2 under `--iteration-threshold 5`, which is exactly the
-  case where that ambiguity would matter. Until that is settled, treat exit-status-0 as *necessary*
-  evidence of convergence and confirm with the posterior file plus the actual iteration count.
+- **A RIFT DAG reporting "1 failed node / N futile" and EXITING WITH STATUS 0 does NOT prove it
+  converged -- it may be a CRASHED convergence test laundered into success.** *(Corrected
+  2026-07-29; an earlier version of this entry asserted the optimistic reading. Do not trust it.)*
+  The iteration loop is stopped by `ABORT-DAG-ON <convergence_test_node> 1 RETURN 0`, i.e.
+  "exit 1 == converged, stop the DAG, report success". `convergence_test_samples` returns 1 on
+  purpose when converged -- but it also returns 1 when it **crashes**, and DAGMan cannot tell the
+  difference: a genuine convergence and an ImportError are **bit-identical from the DAG's side**
+  (same "1 failed" line, same futile count, same `EXITING WITH STATUS 0`).
+  Verified 2026-07 on four real-data DAGs: the test died on `from RIFT.misc import
+  hyperpipeline_io` because a `universe=local, getenv=*` node inherited a `PYTHONPATH` pointing at
+  an OLDER RIFT checkout without that module. The loop stopped at iteration 2 with
+  `--iteration-threshold 5` (which alone should have made an early stop impossible), the test
+  never ran at all, and the "final" posteriors were mid-run snapshots -- the hand-run KL was
+  **36.2 against a 0.02 threshold**.
+  **How to actually check:** the newest `iteration_*_test/logs/test-*.err` must be **EMPTY** and
+  the matching `.out` must contain a KL number. Empty `.err` + a KL verdict = real convergence.
+  Non-empty `.err` = a crash wearing convergence's clothes. The presence of
+  `posterior_samples-*.dat` proves **nothing** -- it is written every iteration regardless.
+  Cross-check the stopping iteration against `--iteration-threshold`; an early stop is a red flag.
+  **Two traps that follow:**
+  (a) When `ABORT-DAG-ON ... RETURN 0` fires, **DAGMan writes no rescue file.** The newest rescue
+  on disk is stale, so a bare resubmit silently re-runs every node completed since it (for us:
+  ~576 expensive ILE/CIP nodes). Reconstruct the true DONE set from `dagman.out` union the prior
+  rescue and hand-build the rescue before resubmitting.
+  (b) The root cause generalises: **every `getenv=*` local node inherits the submitting shell's
+  `PYTHONPATH`**, so any stale RIFT on that path silently version-skews submit-host nodes
+  (this same skew separately broke `util_ParameterPuffball`). Wrap such nodes to prepend the
+  intended `Code/` directory, or point `RIFT_CODE` at a stable checkout before launching.
