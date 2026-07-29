@@ -84,6 +84,22 @@
   `neff is not None`, so it never fired there. Now `neff=None` counts as below-threshold (the pass
   still populated `_rvs`, so the peak-seed is available).
 
+- **AC support-truncation bias: lnZ biased LOW while every within-run error estimate reads fine.**
+  In AC (`mcsamplerGPU.py`), an adapted 1-D histogram bin with exactly ZERO probability is an
+  ABSORBING state — no future draw can land in it, so it can never be re-weighted, and the sampled
+  support shrinks irreversibly. lnZ is biased low by exactly the excluded probability mass, and the
+  bias is INVISIBLE to every within-run diagnostic: on a mild 2D Gaussian test, naive weight
+  variance, block scatter, and khat all read ~0.02 while the true bias was **-0.32 nats**.
+  Two traps in diagnosing it:
+  - **Per-bin marginal comparisons CANNOT see it** — the drawn marginals match the claimed pdf
+    exactly (the sampler is perfectly self-consistent on its truncated support).
+  - The one-line detector that DOES work: draw fresh samples from the final adapted proposal and
+    check `E[prior/p_s] == 1`. A value < 1 IS the supported prior-volume fraction.
+  Root fix: commit `ff0a04ba` on branch `rift_O4d_mc_error_stabilization`
+  (`~/RIFT_develUWM/src/research-projects-RIT`); mechanism + floor-value lore in
+  `design-history.md` ("AC support-truncation bias"). Related knobs: `--adapt-floor-level`,
+  `--adapt-weight-exponent` (`options-cheatsheet.md`).
+
 - **The shape-recovery merge gate DEADLOCKS under its own multiprocessing pool.** Symptom: the run
   goes quiet forever -- elapsed time grows, CPU time does NOT (check
   `cut -d' ' -f14,15 /proc/<pid>/stat` twice, or `ps -o etime=,time=`), the log stops growing, and

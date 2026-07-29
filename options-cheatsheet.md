@@ -14,6 +14,9 @@ Driver: `integrate_likelihood_extrinsic_batchmode`. Line numbers vs branch
 - `--force-adapt-all` — adapt ALL params (use for high SNR / AV backstop).
 - `--force-reset-all` — reset sampling each iteration.
 - `--adapt-weight-exponent X` (tempering; ILE often 0.1, default 1.0), `--adapt-floor-level`.
+  NOTE (AC): a zero histogram floor lets bins hit exactly-zero probability = absorbing =
+  support-truncation lnZ bias; `ff0a04ba` (rift_O4d_mc_error_stabilization) clamps the AC hist
+  floor to >=1e-2. See gotchas.md / design-history.md.
 
 ## Coordinates (see coordinates-and-degeneracies.md)
 - `--inclination-cosine-sampler`, `--declination-cosine-sampler`

@@ -18,6 +18,11 @@ posterior is strongly correlated/curved (high SNR) because the factorized histog
 Key options: `--no-adapt`, `--no-adapt-distance`, `--no-adapt-after-first`, `--force-adapt-all`,
 `--adapt-weight-exponent` (tempering exp; 1.0 default, ILE often uses 0.1), `--adapt-floor-level`.
 
+Known failure mode: **support-truncation bias** — zero-probability histogram bins are absorbing, so
+support shrinks irreversibly and lnZ is biased low invisibly to within-run error estimates. Fixed
+(hist floor clamp + corrected `integrate_log` adaptation weights) in `ff0a04ba` on
+`rift_O4d_mc_error_stabilization`; see `gotchas.md` and `design-history.md`.
+
 ---
 
 ## AV — `AV` (`mcsamplerAdaptiveVolume`) — "VARAHA"
