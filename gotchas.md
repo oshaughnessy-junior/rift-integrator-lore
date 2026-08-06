@@ -231,3 +231,20 @@
   happened first, or the check passes vacuously. Likewise, a configuration test that omits
   `gmm_dict` exercises a different branch of `setup()` and cannot see this class of defect at all;
   grouping, `n_comp` and `gmm_adapt` all survive the aliasing bug intact.
+
+- **You cannot `deepcopy` a RIFT GMM model -- and the failure is silent if you wrote a fallback.**
+  A `gaussian_mixture_model.gmm` (and `estimator`) holds a module reference (`xpy`, numpy or cupy)
+  and bound functions, so `copy.deepcopy(model)` raises `TypeError: cannot pickle 'module' object`.
+  Any "clone it, fall back to the original on failure" helper therefore takes the fallback on
+  **every real model**, leaving it shared -- the isolation you thought you added is inert, and
+  nothing tells you.
+  **What works:** `copy.copy(model)` (a shallow copy never pickles, so the module ref is simply
+  shared -- which is fine, it is stateless), then clone the mutable attributes yourself: `means`,
+  `weights`, `p_nk`, `covariances`, `adapt`. Verify by mutating the clone and asserting the
+  original's `means` and `tempering_coeff` are unchanged -- an identity check (`clone is not orig`)
+  passes even when the attribute state is still shared.
+  **Where this bites:** anything that snapshots a seeded model to restore later. With
+  `--extrinsic-proposal-breadcrumb --extrinsic-proposal-adapt`, seeded groups keep re-fitting and
+  `gmm.update()` mutates in place, so a snapshot-by-reference drifts with the run and replays the
+  previous point's adaptation into the next one. With adapt OFF (the default) `_train` skips seeded
+  groups and nothing mutates, so the bug is invisible until someone enables the flag.
