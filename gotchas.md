@@ -221,10 +221,14 @@
   the snapshot and the leak simply returns one point later.
   **Severity, measured (2026-08, truth-known 2-D displaced-target pair):** with the trained
   proposal leaking across a reset, `n_eff` fell 2036/1583/823 -> 1700/487/196 while `|lnZ bias|`
-  stayed <= 0.010 in **both** arms. A stale GMM proposal is merely a *bad* proposal -- in an AV+GMM
-  portfolio the AV member still covers the support, so the mixture stays unbiased and only
-  efficiency suffers. Contrast the **AV** grid leak, which removes support and genuinely biases
-  (n_eff 1, lnZ bias -59.7).
+  stayed <= 0.010 in **both** arms. A stale GMM proposal is merely a *bad* proposal, so only
+  efficiency suffered here. Contrast the **AV** grid leak, which removes support and genuinely
+  biases (n_eff 1, lnZ bias -59.7).
+  **CORRECTION (2026-08-06):** an earlier version of this entry explained the mild severity by
+  saying the GMM member "still covers the support". That is WRONG -- see the entry below on the
+  1e-300 score floor. In the default configuration the GMM has no defensive component, and its
+  apparent far-field density is a numerical floor, not coverage. The correct reading of the
+  measurement is that the far region was never *sampled* in those runs, not that it was covered.
   **Consequence for testing:** no statistical assertion can detect the GMM aliasing leak -- every
   n_eff/JS/bias check passes. Assert on the object directly (`all(v is None for v in
   integrator.gmm_dict.values())` after the reset), and record separately that training actually
@@ -296,3 +300,21 @@
   Keep the number as an off-path warm-start QUALITY monitor if you like (threshold
   `escaped_mass_early > 1e-2`, 0/40 false positives on matched seeds), but do not gate lnZ on it
   and do not use it to trigger a rerun.
+
+
+- **`gmm.score()` floors at 1e-300 -- that is a log(0) guard, NOT coverage.**
+  It is tempting to argue that a GMM member gives a portfolio full support because a Gaussian
+  mixture has nonzero density everywhere. In this code it does not, twice over:
+  (a) the tails underflow -- a fixed-component fit to a tight cloud returns *exactly* the 1e-300
+  floor at the far corner of the [-5,5]^d box for every d >= 4 (measured d=2 2.9e-273, d>=4
+  1.0e-300); and (b) `score()` clamps with `maximum(scores, 1e-300)`
+  (`gaussian_mixture_model.py:621`), so you can never distinguish "genuinely tiny" from
+  "underflowed to zero". A sample drawn where q is the floor carries importance weight
+  `L*p/q ~ 1e300`: that does not support the estimate, it destroys it.
+  **The only real guarantee is the defensive component** (`add_defensive_component`, Hesterberg
+  1995), which puts a broad box-covering Gaussian at weight `gmm_defensive_frac`. With it, the
+  same far corner reads 1.3e-04 (d=2) and 7.6e-10 (d=6) -- small but usable.
+  **Trap:** until 2026-08 `add_defensive_component` was called ONLY from `fit_gmm_adaptive`, while
+  `gmm_adaptive` defaults to off -- so the documented default `gmm_defensive_frac=0.05` was inert
+  on the default path. Any code reading `gmm_defensive_frac > 0` as a guarantee was wrong by
+  default. Check the fitted model (`model.defensive_frac`), never the config value.
