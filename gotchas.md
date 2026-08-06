@@ -248,3 +248,22 @@
   `gmm.update()` mutates in place, so a snapshot-by-reference drifts with the run and replays the
   previous point's adaptation into the next one. With adapt OFF (the default) `_train` skips seeded
   groups and nothing mutates, so the bug is invisible until someone enables the flag.
+
+- **A reused sampler carries its contracted live volume into the NEXT point (`--n-events-to-analyze > 1`).**
+  `mcsamplerPortfolio.integrate_log` does not call `self.setup()`, so member state -- in particular
+  the AV/VARAHA live volume, which has contracted around the point just finished -- survives into
+  the next integral. If the next point's support lies outside that box, the estimate is biased LOW
+  with a healthy-looking n_eff and no error. This needs no warm-start option: it bites any job that
+  analyses several points with one sampler.
+  **Measured** (truth-known 2-D pair of displaced targets, one reused portfolio): with no reset,
+  point 2 gave n_eff **0-10** and lnZ bias **+0.08 / -35.9 / -449.9** across three seeds; with the
+  reset, n_eff 823-2036 and |bias| <= 0.008.
+  **Fixed** in `mcsamplerPortfolio.clear_warm_state()` (merged into `rift_O4d` 2026-08-06, PR #45),
+  which nulls `_warm`/`_warm_applied` on every member and re-runs each member's `setup()` with its
+  ORIGINAL arguments replayed from a snapshot. The driver calls it unconditionally at the top of
+  every point after the first. Note the ordering that makes it safe: reset FIRST, then install any
+  intentional seed for the new point.
+  **Contrast with the GMM proposal leak** in the entry above: that one costs efficiency only,
+  because the AV member still covers the support. This one REMOVES support, so it biases. When
+  triaging a suspected state leak, ask first which kind it is -- it decides whether any statistical
+  check could have caught it.
