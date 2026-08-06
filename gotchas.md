@@ -207,3 +207,27 @@
   `PYTHONPATH`**, so any stale RIFT on that path silently version-skews submit-host nodes
   (this same skew separately broke `util_ParameterPuffball`). Wrap such nodes to prepend the
   intended `Code/` directory, or point `RIFT_CODE` at a stable checkout before launching.
+
+- **`gmm_dict` is a live, mutated object -- never store or reuse a reference to it.**
+  It looks like an inert grouping spec (`{(0,1,2): None, (3,): None}`), and production always
+  supplies one. But `mcsamplerEnsemble.setup()` passes the caller's dict straight to
+  `monte_carlo.integrator`, which stores it **without copying** (`MonteCarloEnsemble.py:110`) and
+  then writes trained models into it (`self.gmm_dict[dim_group] = model`, `:403`). So after one
+  integration the caller's "spec" holds that run's fitted proposal.
+  Anything that caches setup arguments in order to replay them later (a reset between sequential
+  points, a checkpoint, a member rebuild in a portfolio) therefore hands the **next** point the
+  **previous** point's trained GMM unless it snapshots the dict. Snapshotting on store is only half
+  the fix: the replay must pass a **fresh copy each time**, or the rebuilt integrator trains into
+  the snapshot and the leak simply returns one point later.
+  **Severity, measured (2026-08, truth-known 2-D displaced-target pair):** with the trained
+  proposal leaking across a reset, `n_eff` fell 2036/1583/823 -> 1700/487/196 while `|lnZ bias|`
+  stayed <= 0.010 in **both** arms. A stale GMM proposal is merely a *bad* proposal -- in an AV+GMM
+  portfolio the AV member still covers the support, so the mixture stays unbiased and only
+  efficiency suffers. Contrast the **AV** grid leak, which removes support and genuinely biases
+  (n_eff 1, lnZ bias -59.7).
+  **Consequence for testing:** no statistical assertion can detect the GMM aliasing leak -- every
+  n_eff/JS/bias check passes. Assert on the object directly (`all(v is None for v in
+  integrator.gmm_dict.values())` after the reset), and record separately that training actually
+  happened first, or the check passes vacuously. Likewise, a configuration test that omits
+  `gmm_dict` exercises a different branch of `setup()` and cannot see this class of defect at all;
+  grouping, `n_comp` and `gmm_adapt` all survive the aliasing bug intact.
