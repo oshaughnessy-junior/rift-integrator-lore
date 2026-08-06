@@ -267,3 +267,32 @@
   because the AV member still covers the support. This one REMOVES support, so it biases. When
   triaging a suspected state leak, ask first which kind it is -- it decides whether any statistical
   check could have caught it.
+
+- **You cannot build a lnZ-bias alarm out of "mass the warm member could not have drawn".**
+  Tempting idea: in a portfolio, flag samples where the warm-started member's density is exactly
+  zero (`escaped_mass = sum_{q_m(x)=0} w / sum w`), since a misplaced seed should let another
+  member find mass outside the seeded box. Measured over 1440 runs (20 target seeds per cell,
+  d=4 and d=6, seed displacement 0-4), it does not work as a correctness gate, for a structural
+  reason worth remembering:
+  **escaped weight is observable only when another member covers the complement of the warm
+  member's support -- which is exactly the configuration in which the balance heuristic already
+  keeps lnZ unbiased.** You can see the escape only when the escape is harmless. The statistic is
+  a lower bound on mismatch, never an upper bound.
+  Concretely: (a) in `[AV warm, GMM cold]` the first-chunk statistic IS sharp (floor ~1e-5, TPR
+  1.00 at displacement 2, d=4) -- but |lnZ bias| never exceeded 0.31 nat there anyway, so it flags
+  efficiency loss, not a wrong answer; (b) in the DEFAULT portfolio it reads exactly 0.000 in
+  320/320 runs, because `mcsamplerEnsemble` also implements `bootstrap_from_samples`, so
+  `portfolio.bootstrap_from_samples` seeds every member and nothing is drawn outside the seeded
+  volume; (c) in all-AV -- the configuration that IS biased, median -22.6 nats at displacement 4 --
+  the best variant only reaches TPR 0.6-0.85 once the median bias is already -2 to -4 nats, and at
+  d=6 the runs it misses are the worse ones.
+  **The cumulative form has no floor at all**: on a CORRECTLY placed seed it reads median 0.51
+  (d=4) / 0.80 (d=6), because a well-placed VARAHA member contracts to a likelihood contour that
+  legitimately excludes most of the posterior weight. Only the first-chunk form has a usable floor.
+  **Method note:** the cumulative statistic scored AUC 1.000 at every displacement in the
+  all-seeded arm until a FIXED-BUDGET control was added, whereupon it collapsed to 0.47 -- it was
+  measuring run length, and `1000/n_eff` scored 1.000 in the same cells. Always run the
+  matched-budget control before believing a separation.
+  Keep the number as an off-path warm-start QUALITY monitor if you like (threshold
+  `escaped_mass_early > 1e-2`, 0/40 false positives on matched seeds), but do not gate lnZ on it
+  and do not use it to trigger a rerun.
