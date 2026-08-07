@@ -89,3 +89,37 @@ artifact rather than intrinsic portfolio instability? The portfolio is *designed
 (AV backstop + GMM detail), so a persistent lottery points at member mis-configuration.
 
 Full running record: `RIFT/integrators/DESIGN_portfolio_freeze_policy.md` (in the code repo).
+
+## Do not grow a defensive component inside AV -- that is the portfolio, rebuilt
+
+A recurring review request is "make standalone AV coverage-safe": give it a defensive component so
+its density is nonzero everywhere, so a contracted or seeded live volume cannot silently miss a
+mode. It is the right diagnosis. It is the wrong place to fix it.
+
+**What the fix actually requires.** AV's estimator applies ONE scalar `log_joint_s_prior` to every
+sample -- uniform over the final live volume. A defensive component makes the proposal a weighted
+mixture, so the sampling density becomes per-sample: `q(x) = f*q_broad(x) + (1-f)*q_live(x)`,
+evaluated for every draw and combined. Per-sample mixture densities over weighted components, with
+bookkeeping to guarantee at least one component keeps full support, IS `mcsamplerPortfolio`:
+`q_mix`, defensive members, `_full_support_members`, the draw floor. All of it already exists and
+is tested.
+
+**Why duplicating it is worse than not fixing it.** Two implementations of the same mathematics
+drift. Every silent-failure bug found in the O4d portfolio review was of exactly that shape -- one
+path updated, its twin not:
+  * a capability flag that reported coverage the fit path never installed;
+  * a defensive component installed, then absorbed by the next `update()` while its marker still
+    said it was there;
+  * configuration dropped whenever `setup()` was re-run from a different call site.
+A second defensive mechanism inside AV would add a fourth such seam, and the failure mode of ALL of
+them is a wrong answer with a healthy-looking n_eff.
+
+**The architectural line.** AV is a fast single-proposal sampler: one adaptive live volume, hard
+edges, no coverage guarantee once it contracts. A run that needs a coverage guarantee uses the
+portfolio, which is the component built to provide one. When a reviewer asks for coverage in AV,
+the answer is the routing, not a new mechanism -- plus an honest limitation note at the call site
+and, where it is cheap, a check that refuses to report a result we have evidence is truncated.
+
+**Corollary for review.** "Add a safety component to X" is worth checking against "does a component
+that already does this exist?" before implementing. The measured cost of the wrong answer here is
+not the code -- it is the pair of paths that must then be kept in step forever.
