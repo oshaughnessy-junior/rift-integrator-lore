@@ -318,3 +318,26 @@
   `gmm_adaptive` defaults to off -- so the documented default `gmm_defensive_frac=0.05` was inert
   on the default path. Any code reading `gmm_defensive_frac > 0` as a guarantee was wrong by
   default. Check the fitted model (`model.defensive_frac`), never the config value.
+
+- **`--portfolio-weight-clip`: the estimator is provably safe; the EFFICIENCY claim is not measured
+  at production chunk sizes.**
+  The clip applies to the PROPOSAL-FIT INPUT only (the weights handed to
+  `update_sampling_prior`'s covariance fit). The estimator, the n_ess report and the allocation
+  signal all use the true unclipped weights, and analytic-ground-truth runs confirm estimator bias
+  is unchanged at every C. Clipping the *estimator* instead cost -11.5 nats on a real event, and
+  clipping the *n_ess report* collapsed n_eff to ~1 by starving the AV member -- those are the two
+  wrong scopes, both measured.
+  **What is NOT established:** the threshold is `tau = C*sqrt(n_chunk)*mean(w)`, so how hard it
+  bites scales with the chunk size -- and every test of it ran at `n_chunk = 1e4`, while production
+  runs 4e4 (default) to 1.6e5 (SNR-scaled). Separately, the real-event efficiency numbers in
+  `DESIGN_portfolio_freeze_policy.md` were retracted by PR #33 (the portfolio's GMM member never
+  trained, and the AV draw density was misreporting) and never re-measured. So: enable it to stop a
+  degenerate covariance fit, not because it is known to speed anything up. Open item with the
+  measurement plan in `~/RIFT_roboto_paper/development/OPEN_weight_clip_efficiency.md`.
+
+- **The bayestar-skymap branch of `helper_LDG_Events` is deprecated (unused ~a decade) -- and it is
+  the only place `--n-chunk` drops to 500.**
+  That makes it the least-tested regime for anything whose scale depends on the chunk size: the
+  weight clip is ~4.5x more aggressive there than at the `n_chunk=1e4` used for all clip testing.
+  Do not treat chunk-size-dependent validation as covering it, and prefer retiring the branch to
+  maintaining evidence for it.
