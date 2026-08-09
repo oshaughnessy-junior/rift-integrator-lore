@@ -341,3 +341,21 @@
   weight clip is ~4.5x more aggressive there than at the `n_chunk=1e4` used for all clip testing.
   Do not treat chunk-size-dependent validation as covering it, and prefer retiring the branch to
   maintaining evidence for it.
+
+- **`--portfolio-adaptive-alloc` can raise n_eff while making the posterior WORSE.**
+  Confirmed on the truth-known gate target `d4_n1_s303` at 5 fresh seeds with the flag off vs on:
+  the flag arm FAILS at every seed, and at three of them with HIGHER n_eff than the default arm
+  (292 vs 244, 177 vs 67, 140 vs 136). It fails on the shape metrics (JS / pull / width), not on
+  starvation. More effective samples, worse recovered posterior -- the direct in-house instance of
+  the standing rule that n_eff measures weight CONCENTRATION, not coverage.
+  **Do not read the higher n_eff as evidence the flag helps.** That is the same reading that made
+  the estimator-clip experiment look like a success while it biased lnZ by -11.5 nats.
+  Opt-in, default OFF, never set by the pipeline, so production is unaffected -- but the flag is
+  not safe to promote, and the allocation signal (which concentrates draws on whichever member
+  reports the best per-chunk n_ess) needs a shape-aware guard before it could be.
+  **Method note on why this hid for three PRs:** the flag-ON probe's `patched_build()` wrapped
+  `SR.build_sampler` as it then stood rather than the pristine factory and never restored it, so
+  the default arm ran through the flag arm's wrapper. The confirmation compared the flag against
+  itself and structurally could not report "worse" -- and the bit-identical arms that produced were
+  mistaken (by me) for independent evidence that the flag was innocent. **Identical results from two
+  arms that should differ is a bug signature, not a clean bill of health.**
