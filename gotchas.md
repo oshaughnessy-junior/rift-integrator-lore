@@ -131,6 +131,83 @@
   Overflow protection (below) stops the CRASH but does NOT rescue GMM's quality -- its ESS still
   collapses to ~1. See `samplers.md`, `recommended-configs.md` Group E.
 
+- **[ILE] The SAME error string, one frame apart, is a DIFFERENT bug: AV's empty live volume.**
+  `zero-size array to reduction operation CUPY_CUB_MAX which has no identity` out of *ILE* (not CIP),
+  reported by the driver as `Probable reasons: SEOB nyquist or starting frequency limit or signal
+  duration`. **That attribution was wrong and unconditional** -- the old handler printed it for every
+  exception in the block -- and it sent this failure to the waveform code. Nothing about the waveform
+  is involved. Do not confuse it with the `[CIP]` GMM-overflow entry above: same reduction, different
+  sampler, different cause, different fix.
+  Root cause is two defects stacked (`mcsamplerAdaptiveVolume.py`, fixed in PR #63, junior):
+  1. **The likelihood UNDERFLOWS.** `exp()` of a lnL more than ~745 nats below the peak is 0 in
+     float64, so the likelihood returns `-inf`. Over a *cold* extrinsic prior at rho_net 146.8 that
+     is **99 996 of 100 000 draws** (measured, `RIFT_AV_TRACE=1`, cycle 1), so AV's live set is BORN
+     holding ~4 samples, sometimes 1.
+  2. **`get_likelihood_threshold` could return a threshold >= max(lkl).** With a small live set and
+     one dominant weight, `prob_stop_thr` saturates at the MAXIMUM (every other weight underflowed to
+     exactly 0, so the discard_prob quantile IS the top sample) while `lkl_stop_thr` falls through the
+     `len > nsel` test to the array MINIMUM. Applied as a STRICT `>`, that discards >=1 sample per
+     cycle regardless of merit: the live set ratchets to 1, then 0, then the reduction dies.
+  **Crash rate scales steeply with SNR** (zero-noise injections, fixed intrinsic point, production
+  extrinsic config): rho_net 51.4 -> 0/12, 72.1 -> 4/129, 102.8 -> 5/12, **146.8 -> 11/12**. At the
+  loud end the crash, not the sky-map width, is the dominant extrinsic-export failure, and the
+  posterior is then built from whichever intrinsic points happened to survive.
+  **NOT cupy-specific.** numpy raises the identical `ValueError` ("... reduction operation maximum
+  ...") from the same line; the whole diagnosis was done on CPU, which is far faster. `CUPY_CUB_MAX`
+  appears only because production runs on GPU.
+  After the fix: 0/12 at every amplitude, every run exports, and a degenerate contraction is
+  *reported* instead (see the collapse-verdict entry below).
+
+- **[ILE] A "converged" AV export can still be one sample -- check the collapse verdict, not n_eff.**
+  Post-PR#63 AV returns `dict_return['live_volume_collapsed']` (+ `collapse_reason`, `n_live_final`,
+  `n_empty_cycles`) and prints an `[AV COLLAPSE]` block. ILE writes it beside every other artifact as
+  **`<output>_<indx>_integrator_status.json`** -- written on EVERY run, so `"collapsed": false` is an
+  explicit statement and downstream can *require* the file. Read that, not the log.
+  The collapsed export is not obviously broken: at rho 146.8 its lone draw sat at ra 1.1550,
+  dec 0.4070, d 144.4 against an injected 1.15 / 0.42 / 140. It is a near-argmax point with no width,
+  indistinguishable from a converged draw except by the flag.
+  `--reject-collapsed-live-volume` drops such an event entirely (no .dat/.grid/XML/sidecar). It is
+  **off by default on purpose**: dropping the event silently THINS the posterior in an SNR-dependent
+  way, which is the pre-fix behaviour. Turn it on only when a contaminated point is worse than a
+  missing one.
+
+- **[ILE] k-hat is NOT a pass/fail gate on the extrinsic problem -- ESS is.** Pareto k-hat exceeds its
+  nominal 0.70 "unresolved tail" threshold in runs that are unambiguously HEALTHY: 0.82-1.61 across
+  the twelve converged rho_net=51.4 replicates (and 1.03-1.50 in the earlier rho=51 set). Gating at
+  0.70 would have rejected 12 of 12 good exports. It is also not always computable once the live set
+  is tiny (`khat=None` in the log). ESS separates the regimes with nothing in between:
+  **16.3-34.3 converged vs 1.0-2.0 collapsed.** k-hat is a useful relative indicator; do not gate on it.
+
+- **[ILE] `RIFT_AV_TRACE=1` is the diagnostic for any AV contraction failure.** Env-gated, off by
+  default, zero cost. Prints per cycle: draws, finite/-inf/+inf/NaN counts, how many the chunk
+  contributed (`new=`), cumulative live-set size (`ninj=`), the threshold in and out, and the
+  surviving count. The finite-vs-neginf counts on cycle 1 tell you immediately whether you are
+  underflow-starved. This is what made the above diagnosable at all -- no other output exposes the
+  *sequence*.
+
+- **[ILE] `[L0 auto-rescue] skipped ( Implicit conversion to a NumPy array is not allowed ... )` meant
+  the warm pass ABORTED MID-WAY, not that it was skipped.** Printed on every GPU rescue run before the
+  fix. `integrate()` writes an `integrand` key into `_rvs` AFTER `integrate_log` returns -- i.e. after
+  the arrays are host-side and fair-draw-truncated -- so on a SECOND `integrate()` on the same sampler
+  (exactly the warm-start rescue) that key is stale in both length and backend, and the fair-draw
+  gather indexes a host array with a device index array. Because the raise landed inside
+  `sampler.integrate(...)`, the assignment `res, var, neff, dict_return = ...` never completed:
+  **the ILE reported the COLD pass's lnZ/k-hat/ESS beside the WARM pass's exported samples.** Fixed in
+  PR #63 (drop the stale key on entry, build the fair-draw weights on the sampler's own backend,
+  gather on the host, restore the cold pass in full if the warm pass raises).
+
+- **[ILE] A warm start fails the OPPOSITE way, and n_eff will not tell you.** Seeded from too few
+  points the grid contracts onto a sliver, the integrand is flat across it, and the pass terminates in
+  ONE cycle looking excellent -- large n_live, ESS ~ n, small k-hat -- while lnZ is short by the mass
+  outside the sliver. Measured over 12 rho_net=146.8 rescue replicates: the eleven seeded from 2000
+  puffed points warm-started at V = 7.5e-9..1.5e-8 and returned ln(Z/Lmax) = -27.0..-30.6; the one
+  seeded from **2** points warm-started at V = 9.2e-36 (ln V = -80.7 against a healthy -22..-24) and
+  returned -80.7, about **50 nats low**, with eff_samp 9789 of 10010 samples.
+  The adequacy test is the seed cloud's **affine rank**, not its row count: thousands of duplicated or
+  collinear points span the same degenerate subspace two points do, while `ndim+1` affinely
+  independent points are exactly enough to define a volume. Recorded as `n_seed_rank`/`n_seed_dim`
+  through `bootstrap_from_samples` / `save_state` / `load_state`; the verdict flags `rank < dim`.
+
 - **[CIP] `--lnL-protect-overflow` is a SILENT NO-OP on the whole O4b/O4c/O4d/master line.** It is
   declared in argparse with a perfectly good docstring ("Before fitting, subtract lnLmax - 100. Add
   this quantity back at the end.") at

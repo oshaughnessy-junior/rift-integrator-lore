@@ -89,3 +89,16 @@ cure: shift the peak down to ~+100.
   export for a weighted-posterior / shape check.
 - `--fairdraw-extrinsic-output` — resamples ∝ weight; USELESS at low n_eff.
 - `--calibration-export-posterior` — full fair-draw + cal nodes (calmarg).
+- **`<output>_<indx>_integrator_status.json`** — not a flag, an ARTIFACT (PR #63, junior). Written
+  beside the `.dat`/`.grid`/XML on EVERY run: `collapsed`, `collapse_reason`, lnL/sigma/neff/ntotal,
+  plus whichever of `pareto_khat`, `n_ESS`, `n_live_final`, `n_empty_cycles`, `n_warm_seed(_rank)`,
+  `n_replicas_pooled`/`_collapsed` apply. **This is the machine-readable integrator verdict** — the
+  `.dat` schema is positional (CIP reads it by column) so the status could not be a new column.
+  Under replica pooling lnL/sigma are the POOLED values while ESS/k-hat/live-set counts are the
+  first run's; `n_replicas_*` and the per-replica `collapse_reason` carry the pooled picture.
+- `--reject-collapsed-live-volume` — DROP an event whose live volume degenerated (no .dat/.grid/XML/
+  sidecar at all) instead of exporting it. **Off by default deliberately**: dropping thins the
+  posterior in an SNR-dependent way, which is the failure the fix removed. Checked twice — before
+  replication (fast path) and again on the POOLED verdict, so a collapsed replica cannot slip past.
+- `RIFT_AV_TRACE=1` — env var, not a flag. Per-cycle AV contraction trace; the diagnostic for any
+  live-volume / contraction failure. See `gotchas.md`.

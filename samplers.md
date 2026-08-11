@@ -48,6 +48,21 @@ Critical behaviors / lore:
   burn-in / calmarg warm-start gives AV no speedup (correctness-safe only). (See DESIGN_adaptive_driver.)
 - Standalone AV can stall at n_eff~1 on the hardest high-SNR best-fit points if run in correlated
   coordinates (use the rotations) or without full adaptation.
+- **The contraction threshold is a STRICT `lkl > thr`, so it must never reach max(lkl)** — otherwise
+  it discards the whole live volume and every reduction over it raises "zero-size array to reduction
+  operation ...". That is exactly what happened at high SNR until PR #63 (junior): the likelihood
+  underflows to `-inf` more than ~745 nats below its peak, so a cold chunk yields a handful of finite
+  draws, and with a small live set both terms of `get_likelihood_threshold` degenerate (the enclosed-
+  probability quantile saturates at the MAXIMUM, the rank term falls back to the MINIMUM). The
+  threshold is now clamped strictly below max(lkl), and a chunk that contributes NO finite sample
+  licenses no contraction at all — contraction is an inference *from* the chunk, and re-thresholding a
+  recycled live set shrinks V on no new evidence (measured pre-fix: ln V walking -0.05, -0.11, -0.16,
+  -0.22 ... over chunks that each returned zero finite samples). Full symptom entry in `gotchas.md`.
+- **AV now renders a collapse VERDICT** (`live_volume_collapsed` in `dict_return`, `[AV COLLAPSE]` in
+  the log, `*_integrator_status.json` beside the outputs). Use it rather than n_eff: a collapsed AV
+  export is a near-argmax point that looks like a converged one. The verdict keys on ESS and live-set
+  size, and on the seed's affine rank for a warm start — **not** on k-hat, which exceeds its nominal
+  0.70 threshold even in healthy runs here (0.82-1.61 measured on twelve converged replicates).
 - **AV is TEMPERING-INDEPENDENT — do not try to fix a poor AV n_eff with the tempering exponent.**
   This corrects a very natural misconception (every other RIFT sampler *is* tempered, and both ILE
   and CIP hand AV a `tempering_exp` anyway). Read from the code on branch `tdlike_paper2`
