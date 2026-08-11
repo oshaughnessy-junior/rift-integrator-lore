@@ -89,7 +89,7 @@ cure: shift the peak down to ~+100.
   export for a weighted-posterior / shape check.
 - `--fairdraw-extrinsic-output` — resamples ∝ weight; USELESS at low n_eff.
 - `--calibration-export-posterior` — full fair-draw + cal nodes (calmarg).
-- **`<output>_<indx>_integrator_status.json`** — not a flag, an ARTIFACT (PR #63, junior). Written
+- **`<output>_<indx>_integrator_status.json`** — not a flag, an ARTIFACT (PR #63, junior; merged 2026-08-11 as b4ddb3a0 on rift_O4d). Written
   beside the `.dat`/`.grid`/XML on EVERY run: `collapsed`, `collapse_reason`, lnL/sigma/neff/ntotal,
   plus whichever of `pareto_khat`, `n_ESS`, `n_live_final`, `n_empty_cycles`, `n_warm_seed(_rank)`,
   `n_replicas_pooled`/`_collapsed` apply. **This is the machine-readable integrator verdict** — the

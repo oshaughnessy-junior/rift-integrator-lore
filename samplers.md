@@ -50,7 +50,7 @@ Critical behaviors / lore:
   coordinates (use the rotations) or without full adaptation.
 - **The contraction threshold is a STRICT `lkl > thr`, so it must never reach max(lkl)** — otherwise
   it discards the whole live volume and every reduction over it raises "zero-size array to reduction
-  operation ...". That is exactly what happened at high SNR until PR #63 (junior): the likelihood
+  operation ...". That is exactly what happened at high SNR until PR #63 (junior, merged 2026-08-11 as b4ddb3a0 on rift_O4d): the likelihood
   underflows to `-inf` more than ~745 nats below its peak, so a cold chunk yields a handful of finite
   draws, and with a small live set both terms of `get_likelihood_threshold` degenerate (the enclosed-
   probability quantile saturates at the MAXIMUM, the rank term falls back to the MINIMUM). The

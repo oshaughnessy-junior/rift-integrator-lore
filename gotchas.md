@@ -138,7 +138,7 @@
   exception in the block -- and it sent this failure to the waveform code. Nothing about the waveform
   is involved. Do not confuse it with the `[CIP]` GMM-overflow entry above: same reduction, different
   sampler, different cause, different fix.
-  Root cause is two defects stacked (`mcsamplerAdaptiveVolume.py`, fixed in PR #63, junior):
+  Root cause is two defects stacked (`mcsamplerAdaptiveVolume.py`, fixed in PR #63, junior; merged 2026-08-11 as b4ddb3a0 on rift_O4d):
   1. **The likelihood UNDERFLOWS.** `exp()` of a lnL more than ~745 nats below the peak is 0 in
      float64, so the likelihood returns `-inf`. Over a *cold* extrinsic prior at rho_net 146.8 that
      is **99 996 of 100 000 draws** (measured, `RIFT_AV_TRACE=1`, cycle 1), so AV's live set is BORN
@@ -193,7 +193,7 @@
   gather indexes a host array with a device index array. Because the raise landed inside
   `sampler.integrate(...)`, the assignment `res, var, neff, dict_return = ...` never completed:
   **the ILE reported the COLD pass's lnZ/k-hat/ESS beside the WARM pass's exported samples.** Fixed in
-  PR #63 (drop the stale key on entry, build the fair-draw weights on the sampler's own backend,
+  PR #63 (merged 2026-08-11 as b4ddb3a0) (drop the stale key on entry, build the fair-draw weights on the sampler's own backend,
   gather on the host, restore the cold pass in full if the warm pass raises).
 
 - **[ILE] A warm start fails the OPPOSITE way, and n_eff will not tell you.** Seeded from too few
