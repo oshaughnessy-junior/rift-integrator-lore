@@ -45,3 +45,32 @@ a single degenerate extrinsic mode). See DESIGN_portfolio_freeze_policy.md (high
 | (phi,psi) group broad / unstable across copies | `--internal-rotate-phase` |
 | sky posterior won't converge, 2 IFOs | `--internal-sky-network-coordinates` |
 | AV stalls at n_eff~1 though warm-started | check it is adapting all dims (`--force-adapt-all`) |
+
+## What the n_eff lottery actually needs (measured on a synthetic target, 2026-09-17)
+
+The lottery above was only ever seen on real high-SNR events, where several degeneracies are present
+at once. A synthetic zero-strain H1 fixture with an analytic supplementary factor separates them,
+because the factor's marginal is known in closed form and its shape is chosen, not inherited.
+
+Factor `A cos(phi_orb) + B cos(iota)`, exact `ln Z = ln I0(A) + ln(sinh(B)/B)`, GMM, 8 seeds each:
+
+| case | worst sigma | least n_eff | collapse? |
+|---|---|---|---|
+| A=0.75, B=0 | 0.0160 | 750 | no |
+| A=8, B=0 (sharp phi_orb peak, no inclination term) | 0.0349 | 267 | **no** |
+| A=0.75, B=3 | 0.0235 | 381 | no |
+| A=8, B=2 | 0.0732 | **14.5** | **yes, 2 of 8** |
+
+So a sharp peak in ONE circular parameter is not sufficient. `A=8, B=0` and `A=8, B=2` share the
+same phi_orb peakedness and differ only by the inclination term, and only the second lotteries. The
+dL-inclination arc is doing the work, which matches the "correlated structure it factorizes away"
+rationale above, and does not add to it.
+
+SCOPE, because it is easy to over-read: the fixture is H1-only, so neither the sky ring nor the
+2-IFO phase-polarization structure exists in it. This reproduces ONE of the three degeneracies the
+high-SNR study names, not the production failure mode. The evidence is correct in every case above,
+including the collapsing one. It is n_eff that lotteries, not ln Z.
+
+Do not fix such a lane by adding `--force-adapt-all` or the rotations when a closed-form answer is
+what the lane measures: `--internal-rotate-phase` changes which coordinates a supplementary factor
+is handed, so the closed form no longer describes the integral being computed.
