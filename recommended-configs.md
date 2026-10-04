@@ -13,16 +13,15 @@ established; **[situational]** use only for the stated symptom.
 ## Group A -- typical event, single run (the baseline you should start from)
 
     --sampler-method portfolio --sampler-portfolio AV --sampler-portfolio GMM \
-    --vectorized --gpu --force-xpy --interpolate-time True \
+    --time-marginalization --vectorized --gpu --force-xpy \
     --inclination-cosine-sampler --declination-cosine-sampler
 
 - portfolio AV+GMM: AV is the robust workhorse, GMM catches curved within-group structure.
   VARAHA never-freeze is **[default]** and is what keeps AV from being starved of UPDATES.
-- `--vectorized --gpu --force-xpy` selects the maintained NoLoop likelihood. `--force-xpy` is INERT
-  without `--gpu`.
-- `--interpolate-time True` **[opt-in, validated]**: cubic Q_lm time interpolation. Removes a
-  time-quantization non-smoothness that is a discretization artifact, so the sampler stops chasing
-  non-physics. Requires the NoLoop combo above. Cheap; turn it on.
+- `--time-marginalization --vectorized --gpu --force-xpy` selects the maintained NoLoop likelihood;
+  all four are needed. `--force-xpy` is INERT without `--gpu`.
+- Sub-sample time interpolation is ON by default on NoLoop (`sinc`, since 2026-09-02). Do not add
+  `--interpolate-time True`: it now pins `cubic`. See `option-combos.md`.
 
 ## Group B -- sharply peaked / high-amplitude target (add to Group A)
 

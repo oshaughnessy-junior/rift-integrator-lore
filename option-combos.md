@@ -14,21 +14,35 @@ That is precisely why this lore repo exists. When you learn a combination, recor
 ## The combinations
 
 ### NoLoop likelihood (the maintained one)
-    --vectorized --gpu --force-xpy
-Selects the maintained **NoLoop** likelihood path. Notes:
+    --time-marginalization --vectorized --gpu --force-xpy
+Selects the maintained **NoLoop** likelihood path. All four are needed:
+- without `--time-marginalization` ILE calls `FactoredLogLikelihood`;
+- without `--vectorized` it calls the scalar `FactoredLogLikelihoodTimeMarginalized`;
+- without `--gpu` it calls `DiscreteFactoredLogLikelihoodViaArrayVector`;
+- without `--force-xpy`, on a host with no cupy, ILE prints `Override --gpu (not available)`,
+  drops `--gpu`, and takes the `ViaArrayVector` path.
 - `--force-xpy` is **inert without `--gpu`** (a longstanding trap).
+- For CPU runs strip only `--force-gpu-only`; never strip `--gpu` or `--force-xpy`.
+- Canonical statement: RIFT `AGENTS.md`, REDLINE section (research-projects-RIT PR #386).
 - The pure-CPU path fails on float128; run `--gpu` inside a cupy container.
 
-### Cubic time interpolation (USE THIS)
-    --vectorized --gpu --force-xpy   --interpolate-time True
-`--interpolate-time` evaluates Q_lm at **fractional** detector times by cubic interpolation instead
-of snapping to the nearest sample bin. It **requires the NoLoop likelihood** (the combo above);
-without it the flag does nothing. Takes a truthy VALUE (`True`/`1`/`yes`), not a bare switch.
+### Sub-sample time interpolation (on by default on NoLoop)
+    --time-marginalization --vectorized --gpu --force-xpy   [--interpolate-time sinc|cubic|nearest]
+`--interpolate-time` evaluates Q_lm at **fractional** detector times instead of snapping to the
+nearest sample bin. It **requires the NoLoop likelihood** (the combo above). An explicit request off
+NoLoop is refused; the default instead falls back to `nearest` with a printed
+`Q_lm stencil DEFAULT ... NOT APPLIED` line.
+
+`--interpolate-time` changed on 2026-09-02 (RIFT issue #233): on NoLoop the default is now
+`sinc`, and a legacy truthy value (`True`/`1`/`yes`) now PINS `cubic`. So `--interpolate-time True`
+is no longer "turn it on"; it selects the cheaper stencil. Omit the flag to get the `sinc`
+default, or name a stencil (`nearest|cubic|sinc`) using the crossover table in
+`RIFT/likelihood/DESIGN_q_window_stencil.md`.
 
 Why it matters for the integrator: nearest-bin time quantization injects a **superfluous
 non-smoothness into the extrinsic likelihood surface**. The samplers then have to chase structure
 that is a discretization artifact rather than physics. Turning on cubic interpolation removes it and
-makes convergence more robust. Default is off for backward compatibility — turn it on.
+makes convergence more robust. Before 2026-09-02 the default was off (`nearest`).
 
 ### lnL mode
 - `--internal-use-lnL` — likelihood returns lnL and the integrator integrates lnL. Only valid for

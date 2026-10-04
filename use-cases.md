@@ -105,6 +105,7 @@ a configuration that is ROBUST and then **backtest it down to lower SNR to confi
 useful** there -- not to spend the budget characterizing exactly how a bad setup fails. Performance
 of a bad setup is worth a bounded look, no more.
 
-Always include `--interpolate-time True` (with the NoLoop combo) in any convergence study: without it
+Always run convergence studies on the NoLoop combo with a sub-sample stencil in force (the `sinc`
+default, or a named one; check the log has no `NOT APPLIED` line). With `nearest`
 the extrinsic surface carries a time-quantization non-smoothness that is a discretization artifact,
 and you will be tuning the sampler against an artifact.

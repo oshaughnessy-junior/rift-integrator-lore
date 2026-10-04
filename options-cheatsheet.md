@@ -34,10 +34,10 @@ Driver: `integrate_likelihood_extrinsic_batchmode`. Line numbers vs branch
 - `--portfolio-weight-clip C`, `--portfolio-varaha-min-frac X`
 
 ## Likelihood path (see option-combos.md -- these only work in combination)
-- `--vectorized --gpu --force-xpy` — the maintained NoLoop likelihood. `--force-xpy` is INERT without `--gpu`.
-- `--interpolate-time True` — CUBIC Q_lm interpolation at fractional detector times instead of
-  nearest sample bin. Requires the NoLoop combo above. Takes a truthy VALUE, not a bare switch.
-  Removes a spurious extrinsic non-smoothness (time quantization) -> more robust convergence. USE IT.
+- `--time-marginalization --vectorized --gpu --force-xpy`: the maintained NoLoop likelihood; all four
+  are needed. `--force-xpy` is INERT without `--gpu`.
+- `--interpolate-time sinc|cubic|nearest`: Q_lm at fractional detector times. Default `sinc` on
+  NoLoop since 2026-09-02; `True` now pins `cubic`. Requires the NoLoop combo above.
 - `--internal-use-lnL` — integrate lnL. Forced ON for the portfolio (which requires it).
 
 ## Budget / convergence

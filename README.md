@@ -57,9 +57,9 @@ dispatch: `integrate_likelihood_extrinsic_batchmode` ~lines 1169-1244.
    defaults meant to be used together, but the wiring that would enforce that was never added (it
    would be spaghetti after a decade of accretion). An incomplete combo usually degrades silently
    rather than failing. Read `option-combos.md` before composing a command line. Two you almost
-   always want: `--vectorized --gpu --force-xpy` (the maintained NoLoop likelihood) and
-   `--interpolate-time True` (cubic Q_lm time interpolation; needs NoLoop; removes a spurious
-   extrinsic non-smoothness and makes convergence more robust).
+   always want: `--time-marginalization --vectorized --gpu --force-xpy` (the maintained NoLoop
+   likelihood; all four are needed) and a sub-sample Q_lm stencil, which NoLoop now applies by
+   default (`sinc`, since 2026-09-02). `--interpolate-time True` now pins `cubic`; do not add it.
 6. **The portfolio estimate is unbiased for ANY member weights** (balance-heuristic `q_mix`), so a
    member can never bias lnZ — only cost draws. This is why AV can be freeze-exempt. See `samplers.md`.
 7. **[CIP] On a LOUD event use `--sampler-method AV`, never `GMM`.** GMM does not merely converge
@@ -72,7 +72,7 @@ dispatch: `integrate_likelihood_extrinsic_batchmode` ~lines 1169-1244.
 - `samplers.md` — per-sampler: what it is, key options, when to use, failure modes.
 - `coordinates-and-degeneracies.md` — extrinsic coordinate transforms + the degeneracies they tame.
 - `recommended-configs.md` — **copy-paste configuration GROUPS** (typical / sharp-peak / degeneration guard / **[CIP] loud event**) + how to judge a result. Start here.
-- `option-combos.md` — **valid option COMBINATIONS** (NoLoop, cubic time interp, lnL/return_lnI). Read first.
+- `option-combos.md` — **valid option COMBINATIONS** (NoLoop, time interpolation, lnL/return_lnI). Read first.
 - `options-cheatsheet.md` — the CLI flags that actually change behavior, grouped.
 - `use-cases.md` — decision guide: given an event, which sampler + config.
 - `gotchas.md` — the traps, with the symptom that reveals each.
