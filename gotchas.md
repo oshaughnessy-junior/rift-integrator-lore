@@ -436,3 +436,32 @@
   itself and structurally could not report "worse" -- and the bit-identical arms that produced were
   mistaken (by me) for independent evidence that the flag was innocent. **Identical results from two
   arms that should differ is a bug signature, not a clean bill of health.**
+
+- **A portfolio AV member contracted without limit before PR #404 (merged rift_O4d 752ffcaff,
+  2026-10-06).** `update_sampling_prior_selfish` (one VARAHA cycle per portfolio chunk) reset its
+  threshold, `trunc_p` and live set on every call, so V fell by `n_chunk/nsel` per chunk and the
+  live volume cut away the posterior. Signature: `PORTFOLIO support: escaped_mass=[1. 0.]`,
+  `weight_share` ~[1e-8, 1]; in the JAX ILE driver its n_eff<1.5 guard reports this as logZ=nan.
+  The step now persists that state like `integrate_log`, caps the live set only after the final
+  threshold, and FREEZES the grid on a reused pass (calmarg burn-in) once a pass reached the final
+  threshold. On an older checkout, assume any AV+GMM portfolio's AV member is useless.
+- **The portfolio calls lnF by NAME unless the caller passes `no_protect_names`, and AV's selfish
+  step called it POSITIONALLY in parameter order (fixed in PR #404).** Classic ILE adds parameters
+  psi, phi_orb, inclination, distance, RA, dec, but its likelihood signature is (RA, dec, phi_orb,
+  inclination, psi, distance): every classic ILE portfolio run before #404 adapted AV to permuted
+  arguments. JAX ILE, CIP, EOS and the shape gate pass `no_protect_names` and never saw it, so an
+  e2e through one driver does not cover another. Still open at merge: classic ILE on the 400 Mpc
+  `case.json` box gives AV 597.2 vs fixed portfolio 605.9 (base 614.6), unexplained.
+- **Standalone AV lnZ can be ~2 nats HIGH at high SNR (measured; investigation open).** JAX ILE,
+  400 Mpc H1L1 fixture, full sky: AV 942.6, but importance sampling uniformly over AV's own final
+  bins gives 940.5-940.8 (= the fixed portfolio). AV's scalar ln V (-21.7) exceeds the measured
+  volume above its final threshold inside its bins (-23.65). Probe: draw_simple on the final grid,
+  evaluate lnL, compare. When AV and the portfolio disagree, do not assume AV is the reference.
+- **Multi-group GMM members misstate their density (measured; fix in progress).** `gmm.sample`
+  returns rows grouped by component and `MonteCarloEnsemble._sample` writes each dim group into the
+  same rows, so component labels are correlated across groups while `sampling_density` claims the
+  product. A dumped 6-group JAX portfolio member gave E_q[prior/q] = 19.9 (must be <= 1); each group
+  alone is honest; shuffling rows gives 1.05. Check the JOINT, not per-group marginals.
+- **The "network-frame sky" is what makes JAX AV converge on 2-detector full-sky events.** On the
+  1600 Mpc fixture, equatorial AV gave n_eff 3.4/4.6/50.5 (seeds 11-13); `--sky-coordinates network`
+  gave ~50 on all three. Name the sky coordinates when quoting an AV convergence result.
