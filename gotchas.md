@@ -457,11 +457,20 @@
   bins gives 940.5-940.8 (= the fixed portfolio). AV's scalar ln V (-21.7) exceeds the measured
   volume above its final threshold inside its bins (-23.65). Probe: draw_simple on the final grid,
   evaluate lnL, compare. When AV and the portfolio disagree, do not assume AV is the reference.
-- **Multi-group GMM members misstate their density (measured; fix in progress).** `gmm.sample`
-  returns rows grouped by component and `MonteCarloEnsemble._sample` writes each dim group into the
-  same rows, so component labels are correlated across groups while `sampling_density` claims the
-  product. A dumped 6-group JAX portfolio member gave E_q[prior/q] = 19.9 (must be <= 1); each group
-  alone is honest; shuffling rows gives 1.05. Check the JOINT, not per-group marginals.
+- **Multi-group GMM members misstated their density (FIXED in PR #407, rift_O4d 37e43a104).**
+  `gmm.sample` returned rows grouped by component and `MonteCarloEnsemble._sample` writes each dim
+  group into the same rows, so component labels were correlated across groups while
+  `sampling_density` claimed the product. A dumped 6-group JAX portfolio member gave
+  E_q[prior/q] = 19.9 (must be <= 1); each group alone was honest; shuffling rows gave 1.05. The fix
+  permutes rows and draws per-component counts by residual sampling (`int(n*w)` never drew a
+  weight below 1/n). Check the JOINT, not per-group marginals.
+  - Standalone GMM numbers barely moved: CIP GMM (one 1-D group per parameter) lnZ 93.83 in both
+    arms; ILE GMM e2e analytic lanes unchanged. When the per-group fits match a separable target,
+    f/q is ~1 wherever the coupled draws land, so the bias needs a target away from the proposal.
+    A portfolio member is that case: the other members' draws are scored by its wrong density.
+  - The shape gate cannot see this class: its GMM and portfolio-GMM cells use ONE all-dims group.
+  - `gmm.sample` still draws on the HOST (scipy truncnorm) and copies to the device; moving it onto
+    xpy is an open task (2026-10-06).
 - **The "network-frame sky" is what makes JAX AV converge on 2-detector full-sky events.** On the
   1600 Mpc fixture, equatorial AV gave n_eff 3.4/4.6/50.5 (seeds 11-13); `--sky-coordinates network`
   gave ~50 on all three. Name the sky coordinates when quoting an AV convergence result.
