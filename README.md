@@ -77,6 +77,7 @@ dispatch: `integrate_likelihood_extrinsic_batchmode` ~lines 1169-1244.
 - `use-cases.md` — decision guide: given an event, which sampler + config.
 - `gotchas.md` — the traps, with the symptom that reveals each.
 - `design-history.md` — why the integrators are built the way they are.
+- `workflow-recovery.md` — bounded native rescue, partial ILE reuse, and operational repair.
 
 ## In-code deep dives (canonical, versioned with the code)
 

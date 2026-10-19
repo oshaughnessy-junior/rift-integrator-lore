@@ -474,3 +474,8 @@
 - **The "network-frame sky" is what makes JAX AV converge on 2-detector full-sky events.** On the
   1600 Mpc fixture, equatorial AV gave n_eff 3.4/4.6/50.5 (seeds 11-13); `--sky-coordinates network`
   gave ~50 on all three. Name the sky coordinates when quoting an AV convergence result.
+
+## Workflow recovery
+
+For native DAG rescue, partial ILE reuse, runtime-generated submit files, and
+scoped worker repair, see [workflow-recovery.md](workflow-recovery.md).
