@@ -66,6 +66,10 @@ products. See the convergence-test entry in [gotchas.md](gotchas.md).
   discards the whole batch.
 - Correct submit files as well as existing job ads. DAGMan reads submit files for
   future nodes, and CIP sub-DAGs can generate additional files at runtime.
+- With shared-filesystem `should_transfer_files = NO`, remove conflicting
+  `transfer_input_files` declarations. Confirm that unchanged arguments already
+  identify the shared inputs, then dry-run each submit file with its DAG macros.
+  A submit-time classad failure produces no worker stderr; inspect DAGMan output.
 - A `qedit` readback proves an ad changed, not that a running job adopted its new
   walltime policy. CIT has enforced original limits after a successful readback.
   Preserve those attempts and resume from corrected submit files.
@@ -96,3 +100,6 @@ verified that a completed node ran once while a deliberately failed node ran
 twice and the master exited successfully. The same record contains the deployed
 [autonomous repair implementation and tests](https://github.com/oshaughnessy-junior/RIFT_roboto_paper/tree/04062608/analyses/eccentric_zero_spin_20261017/records/autonomous_followup_deployed/tools).
 These tests establish recovery mechanics, not scientific correctness.
+
+The [shared-scratch submit-contract repair](https://github.com/oshaughnessy-junior/RIFT_roboto_paper/tree/08c19b41/analyses/eccentric_zero_spin_20261017/records/operational_amendment_20261020_cip_submit)
+preserves before/after scheduler dry runs for CIP and puff-ILE transfer conflicts.
