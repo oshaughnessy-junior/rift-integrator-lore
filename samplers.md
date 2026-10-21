@@ -2,8 +2,9 @@
 
 Frame: all are importance samplers over the EXTRINSIC parameters (RA, dec, distance, inclination,
 psi, phi_orb, and time via time-marginalization). Each draws points, evaluates the marginal
-likelihood, and forms importance weights `w = L * prior / sampling_prior`. Quality is the effective
-sample count `n_eff` (Kish). Intrinsic params are fixed per ILE evaluation (the grid point).
+likelihood, and forms importance weights `w = L * prior / sampling_prior`. Reported effective-sample
+statistics depend on the sampler: `n_eff` is not automatically Kish ESS and does not
+certify coverage. Intrinsic params are fixed per ILE evaluation (the grid point).
 
 The same classes are reused by **CIP** for the INTRINSIC integral, but there the integrand is
 `exp(lnL)` over a fitted surface rather than lnL over the extrinsic parameters, so the failure modes

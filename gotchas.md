@@ -479,3 +479,19 @@
 
 For native DAG rescue, partial ILE reuse, runtime-generated submit files, and
 scoped worker repair, see [workflow-recovery.md](workflow-recovery.md).
+
+## AV stopping and returned effective counts can differ
+
+On O4d commit `d8f676e4a30b24e816f26085f21bc90c518d95b6`, standalone AV tests
+its stopping target inside the loop, then recomputes the returned max-weight
+count using final importance weights. Neither count is automatically Kish ESS.
+See `mcsamplerAdaptiveVolume.py:2237-2241,2350-2363,2431-2443` at that commit.
+A recovery gate that requires the returned count to exceed the requested target
+can therefore reject a run that met its native stopping condition.
+
+Check the source-defined stopping statistic, draw budget, final precision and
+collapse diagnostics separately; retain all reported values. In the
+[recorded recovery](https://github.com/oshaughnessy-junior/RIFT_roboto_paper/tree/4687f093/analyses/eccentric_zero_spin_20261017/records/operational_amendment_20261021_missing_point),
+the native statistic was31.40 against target30, while the returned count was27.65
+and final Kish ESS103.46. These facts justify that specific completion check;
+they do not establish convergence or permit relabeling the returned count.
